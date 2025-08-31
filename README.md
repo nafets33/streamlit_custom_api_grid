@@ -1,20 +1,18 @@
-# AI Voice LLM Chat
+# Aggrid Custom Grid Streamlit API Enablement
 
-A Streamlit custom component that provides a chat window with voice capabilities for conversation handling.
+A Streamlit custom component that provides customizable grids with API integration.
 
 ## Features
 
-- Voice-activated chat interface
-- Face recognition capabilities
-- Customizable conversation handling
-- React-based frontend with TypeScript
-- Integration with custom APIs for voice processing
+- Customizable grid options
+- API integration for data handling
+- Pagination, sorting, and filtering
+- Modern UI with themes
 
 ## Installation
 
 ```bash
-pip install streamlit-ai-voice-chat
-```
+pip install streamlit-custom-api-grid
 
 ## Usage
 
