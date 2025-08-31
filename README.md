@@ -13,6 +13,11 @@ A Streamlit custom component that provides customizable grids with API integrati
 
 ```bash
 pip install streamlit-custom-api-grid
+```
+
+## Demo
+see a demo of the grid in action at quantqueen.com/LiveBot 
+
 
 ## Usage
 
