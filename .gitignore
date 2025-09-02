@@ -70,10 +70,10 @@ ehthumbs.db
 Thumbs.db
 
 # Frontend
-custom_voiceGPT/frontend/node_modules/
-custom_voiceGPT/frontend/npm-debug.log*
-custom_voiceGPT/frontend/yarn-debug.log*
-custom_voiceGPT/frontend/yarn-error.log*
+custom_grid/frontend/node_modules/
+custom_grid/frontend/npm-debug.log*
+custom_grid/frontend/yarn-debug.log*
+custom_grid/frontend/yarn-error.log*
 
 # Logs
 *.log

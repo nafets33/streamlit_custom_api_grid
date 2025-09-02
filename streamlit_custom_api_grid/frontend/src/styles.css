@@ -1,0 +1,46 @@
+
+#myGrid {
+  /* flex: 1 1 0px; */
+  width: 100%;
+
+  --ag-value-change-delta-down-color: rgb(0, 200, 160);
+  --ag-value-change-delta-up-color: rgb(255, 0, 80);
+}
+.ag-header-cell{
+  /* padding-left: 0px; */
+  padding-right: 0px;
+  /* text-align: center !important; */
+}
+#toast-container {
+  margin-top: 1rem;
+}
+
+#toast-container.toast-top-full-width>.toast {
+  max-width: 270px;
+}
+
+#toast-container>.toast-success {
+  background-color: #35c8c3;
+  opacity:1;
+  box-shadow:0px 0px 10px rgba(0,0,0,0.2);
+}
+
+#toast-container>.toast-success:hover {
+  background-color: #35c8c3;
+  opacity:1;
+  box-shadow:0px 0px 10px rgba(0,0,0,0.4);
+}
+
+.ag-theme-material .ag-header {
+  background-color: #eaf3fb !important; /* Light blue, almost white */
+  color: #1a3556 !important; /* Darker blue for text */
+}
+.ag-theme-material .ag-header-cell-label {
+  color: #1a3556 !important; /* Darker blue for header cell label text */
+}
+
+/* Fix header hover background so text stays visible */
+.ag-theme-material .ag-header-cell:hover {
+  background-color: #b3d1f2 !important; /* Slightly darker light blue */
+  color: #1a3556 !important; /* Darker blue for text */
+}
