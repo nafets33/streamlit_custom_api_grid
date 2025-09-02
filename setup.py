@@ -9,11 +9,15 @@ except FileNotFoundError:
 
 setup(
     name="streamlit-custom_api_grid",
-    version="0.1.0",
+    version="0.1.1",
     packages=find_packages(),
     install_requires=[
         "streamlit>=1.0.0",
     ],
+    include_package_data=True,  # Ensure package data is included
+    package_data={
+        "streamlit_custom_api_grid": ["frontend/build/**/*"],  # Include all files in build
+    },
     author="Stefan Stapinski",
     author_email="stefanstapinski@gmail.com",  # Use your actual TestPyPI email
     description="A Streamlit Aggrid custom component with Custom Button Modal and API integration",

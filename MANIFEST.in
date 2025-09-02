@@ -1,0 +1,17 @@
+# Include important files
+include README.md
+include LICENSE
+include setup.py
+
+# Include all files in the frontend build directory
+recursive-include streamlit_custom_api_grid/frontend/build *
+
+# Include all files in the public directory
+recursive-include streamlit_custom_api_grid/frontend/public *
+
+# Include all files in the src directory
+recursive-include streamlit_custom_api_grid/frontend/src *
+
+# Exclude unnecessary files
+global-exclude *.pyc
+global-exclude __pycache__/*
