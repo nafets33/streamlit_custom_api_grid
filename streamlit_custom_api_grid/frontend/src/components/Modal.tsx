@@ -68,7 +68,7 @@ const ordersToRender = (selectedRow && display_grid_column && Array.isArray(sele
   : [];
 const dataCols = ordersToRender.length > 0 ? Object.keys(ordersToRender[0]) : [];
 const editableColHeaders = editableCols.map((col: { col_header: string }) => col.col_header);
-const allCols = Array.from(new Set([...dataCols, ...editableColHeaders]));
+const allCols = Array.from(new Set([...editableColHeaders, ...dataCols]));
   
 const ref = useRef<HTMLButtonElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -186,13 +186,6 @@ useEffect(() => {
   }
 
 
-// // Fake editable columns list for demo
-// const editableCols = [
-//   { col_header: "limit_order", dtype: "checkbox" },
-//   { col_header: "buy_amount", dtype: "number" },
-//   { col_header: "order_note", dtype: "text" },
-//   { col_header: "sell_date", dtype: "datetime" }
-// ];
 
 return (
   <ReactModal
@@ -208,51 +201,43 @@ return (
       <span className="close" onClick={closeModal} style={{ position: "absolute", right: "20px" }}>
         &times;
       </span>
-      {/* Modal Footer Buttons at Top */}
-      <div className="d-flex" style={{ position: "absolute", left: "20px" }}>
-        <button type="button" className="btn btn-primary mx-2" onClick={handleOkSecond} ref={ref}>
-        Ok
-        </button>
-        <button type="button" className="btn btn-secondary mx-2" onClick={closeModal}>
-        Cancel
-        </button>
-      </div>
+
       </div>
 
       {/* Modal Body */}
       <div className="modal-body p-3">
         <div className="d-flex flex-column">
           {/* Boolean Fields Top Row */}
-{booleanFields.length > 0 && (
-  <div
-    className="d-flex flex-row justify-content-between mb-2"
-    style={{
-      border: "1px solid #e0e0e0", // Light gray outline
-      borderRadius: "8px",
-      padding: "8px",
-      background: "#fafcff"
-    }}
-  >
-    {booleanFields.map((rule: any, index: number) => (
-      <div className="d-flex flex-column align-items-center" key={index} style={{ marginRight: "8px" }}>
-        <label className="mb-0" style={{ minWidth: "100px", textAlign: "center", fontSize: "0.9rem" }}>
-          {rule}:
-        </label>
-        <input
-          type="checkbox"
-          checked={promptText[rule]}
-          onChange={(e) =>
-            setPromptText({
-              ...promptText,
-              [rule]: e.target.checked,
-            })
-          }
-          style={{ width: "16px", height: "16px", marginTop: "4px" }}
-        />
-      </div>
-    ))}
-  </div>
-)}
+          {booleanFields.length > 0 && (
+            <div
+              className="d-flex flex-row justify-content-between mb-2"
+              style={{
+                border: "1px solid #e0e0e0", // Light gray outline
+                borderRadius: "8px",
+                padding: "8px",
+                background: "#fafcff"
+              }}
+            >
+              {booleanFields.map((rule: any, index: number) => (
+                <div className="d-flex flex-column align-items-center" key={index} style={{ marginRight: "8px" }}>
+                  <label className="mb-0" style={{ minWidth: "100px", textAlign: "center", fontSize: "0.9rem" }}>
+                    {rule}:
+                  </label>
+                  <input
+                    type="checkbox"
+                    checked={promptText[rule]}
+                    onChange={(e) =>
+                      setPromptText({
+                        ...promptText,
+                        [rule]: e.target.checked,
+                      })
+                    }
+                    style={{ width: "16px", height: "16px", marginTop: "4px" }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
 
 
@@ -290,496 +275,52 @@ return (
         </div>
       )}
 
-
-      {/* Active Orders Table */}
-      {prompt_field === "sell_option" &&
-        selectedRow &&
-        Array.isArray(selectedRow.active_orders) &&
-        selectedRow.active_orders.length > 0 && (
-          <div style={{ margin: "16px 0" }}>
-            <div
-              style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
-              onClick={() => setShowActiveOrders((prev: boolean) => !prev)}
-            >
-              {showActiveOrders ? "▼" : "►"} Active Orders
-            </div>
-            {showActiveOrders && (() => {
-              const ordersToRender = selectedRow.active_orders;
+      {/* Other Fields (Text, Datetime, Array Fields) */}
+      <div className="d-flex flex-row justify-content-between">
+        {/* Text Fields Column */}
+        {textFields.length > 0 && (
+          <div className="d-flex flex-column" style={{ flex: 1, marginRight: "8px" }}>
+            {textFields.map((rule: any, index: number) => {
+              if (sliderRules_stars.includes(rule)) return null;
+              if (sliderRules_stars_margin.includes(rule)) return null;
+              const isSliderRule = sliderRules.includes(rule);
               return (
-                <div style={{ overflowX: "auto" }}>
-                  <table className="table table-bordered table-sm" style={{ fontSize: "0.8rem" }}>
-                    <thead>
-                      <tr>
-                        {Object.keys(ordersToRender[0]).map((col) => (
-                          <th key={col}>{col}</th>
-                        ))}
-                        <th>sell_qty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ordersToRender.map((order: any, idx: number) => (
-                        <tr key={idx}>
-                          {Object.keys(ordersToRender[0]).map((col) => (
-                            <td key={col}>
-                              {order && order[col] !== undefined ? String(order[col]) : ""}
-                            </td>
-                          ))}
-                          <td>
-                            <input
-                              type="number"
-                              min={0}
-                              max={order.qty_available}
-                              value={sellQtys[idx] || ""}
-                              onChange={e => {
-                                let value = e.target.value;
-                                if (value === "") {
-                                  handleSellQtyChange(idx, "");
-                                  return;
-                                }
-                                let num = Number(value);
-                                if (num < 0) num = 0;
-                                if (order.qty_available !== undefined && num > order.qty_available) num = order.qty_available;
-                                handleSellQtyChange(idx, String(num));
-                                const updatedOrders = ordersToRender.map((ord: any, i: number) => ({
-                                  ...ord,
-                                  sell_qty: i === idx ? String(num) : (sellQtys[i] !== undefined && sellQtys[i] !== "" ? sellQtys[i] : "")
-                                }));
-                                setPromptText({
-                                  ...promptText,
-                                  active_orders_with_qty: updatedOrders
-                                });
-                              }}
-                              style={{ width: "80px", fontSize: "0.8rem" }}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-      )}
-
-      {/* Wave Data Table
-      {prompt_field === "kors" &&
-        selectedRow &&
-        Array.isArray(selectedRow['wave_data']) &&
-        selectedRow['wave_data'].length > 0 && (
-          <div style={{ margin: "16px 0" }}>
-            <div
-              style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
-              onClick={() => setShowWaveData((prev: boolean) => !prev)}
-            >
-              {showWaveData ? "▼" : "►"} Show Buy Time Set Allocations
-            </div>
-            {showWaveData && (() => {
-              const ordersToRender = selectedRow['wave_data'];
-              return (
-                <div style={{ overflowX: "auto" }}>
-                  <table className="table table-bordered table-sm" style={{ fontSize: "0.8rem" }}>
-
-<thead>
-  <tr>
-    {Object.keys(ordersToRender[0]).map((col) => (
-      <th key={col}>{col}</th>
-    ))}
-    <th>Buy Amount</th>
-  </tr>
-</thead>
-
-
-<tbody>
-  {ordersToRender.map((order: any, idx: number) => (
-    <tr key={idx}>
-      {Object.keys(ordersToRender[0]).map((col) => (
-        <td key={col}>
-          {order && order[col] !== undefined
-            ? typeof order[col] === "number"
-              ? Number(order[col]).toLocaleString(undefined, { maximumFractionDigits: 2 })
-              : String(order[col])
-            : ""}
-        </td>
-      ))}
-      <td>
-        <input
-          type="number"
-          min={0}
-          value={buyAmounts[idx] || ""}
-          onChange={e => {
-            let value = e.target.value;
-            if (value === "") {
-              handleBuyAmountChange(idx, "");
-              return;
-            }
-            let num = Number(value);
-            if (num < 0) num = 0;
-            handleBuyAmountChange(idx, String(num));
-            const updatedOrders = ordersToRender.map((ord: any, i: number) => ({
-              ...ord,
-              buy_amount: i === idx ? String(num) : (buyAmounts[i] !== undefined && buyAmounts[i] !== "" ? buyAmounts[i] : "")
-            }));
-            setPromptText({
-              ...promptText,
-              display_grid_column_with_buy_amount: updatedOrders
-            });
-          }}
-          style={{ width: "80px", fontSize: "0.8rem" }}
-        />
-      </td>
-    </tr>
-  ))}
-</tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-      )} */}
-
-{/* Display Grid Column Table */}
-{display_grid_column &&
-  selectedRow &&
-  Array.isArray(selectedRow[display_grid_column]) &&
-  selectedRow[display_grid_column].length > 0 && (
-    <div style={{ margin: "16px 0" }}>
-      <div
-        style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
-        onClick={() => setShowButtonColData((prev: boolean) => !prev)}
-      >
-        <span style={{ marginRight: "8px" }}>
-          {showButtonColData ? "▼" : "►"}
-        </span>
-        <button
-          type="button"
-          className="btn btn-link p-0"
-          style={{ fontWeight: "bold", textDecoration: "underline", color: "#007bff", background: "none", border: "none", cursor: "pointer" }}
-          onClick={() => setShowButtonColData((prev: boolean) => !prev)}
-        >
-          {display_grid_column}
-        </button>
-      </div>
-      {showButtonColData && (() => {
-        const ordersToRender = selectedRow[display_grid_column];
-        return (
-          <div style={{ overflowX: "auto" }}>
-            <table className="table table-bordered table-sm" style={{ fontSize: "0.6rem" }}>
-<thead>
-  <tr>
-    {allCols.map((col) => (
-      <th key={col}>{col}</th>
-    ))}
-  </tr>
-</thead>
-<tbody>
-  {ordersToRender.map((order: any, idx: number) => (
-    <tr key={idx}>
-      {allCols.map((col) => {
-        const editableCol = editableCols.find((ec: { col_header: string; }) => ec.col_header === col);
-        if (editableCol) {
-          // Render input for editable column
-          if (editableCol.dtype === "checkbox") {
-            return (
-              <td key={col}>
-                <input
-                  type="checkbox"
-                  checked={!!editableValues[col]?.[idx]}
-                  onChange={e => {
-                    const value = e.target.checked;
-                    setEditableValues(prev => ({
-                      ...prev,
-                      [col]: { ...prev[col], [idx]: value }
-                    }));
-                  }}
-                />
-              </td>
-            );
-          } else if (editableCol.dtype === "number") {
-            return (
-              <td key={col}>
-                <input
-                  type="number"
-                  value={editableValues[col]?.[idx] || ""}
-                  onChange={e => {
-                    const value = e.target.value;
-                    setEditableValues(prev => ({
-                      ...prev,
-                      [col]: { ...prev[col], [idx]: value }
-                    }));
-                  }}
-                  style={{ width: "80px", fontSize: "0.8rem" }}
-                />
-              </td>
-            );
-          }else if (editableCol.dtype === "datetime") {
-                  return (
-                    <td key={col}>
+                <div className="d-flex flex-column align-items-start mb-1" key={index}>
+                  <label className="mb-0" style={{ fontSize: "0.9rem" }}>
+                    {rule}:
+                    {rule === "sell_amount" && (
+                      <span
+                        style={{ marginLeft: "4px", cursor: "pointer" }}
+                        title="This amount will override sell_qty"
+                      >
+                        ❓
+                      </span>
+                    )}
+                  </label>
+                  {isSliderRule ? (
+                    <>
                       <input
-                        type="datetime-local"
-                        value={editableValues[col]?.[idx] || ""}
-                        onChange={e => {
-                          const value = e.target.value;
-                          setEditableValues(prev => ({
-                            ...prev,
-                            [col]: { ...prev[col], [idx]: value }
-                          }));
-                        }}
-                        style={{ width: "140px", fontSize: "0.8rem" }}
+                        type="range"
+                        min="0"
+                        max="1"
+                        step=".01"
+                        value={promptText[rule] || 0}
+                        onChange={(e) =>
+                          setPromptText({
+                            ...promptText,
+                            [rule]: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: "100%" }}
                       />
-                    </td>
-                  );
-          } else {
-            // text
-            return (
-              <td key={col}>
-                <input
-                  type="text"
-                  value={editableValues[col]?.[idx] || ""}
-                  onChange={e => {
-                    const value = e.target.value;
-                    setEditableValues(prev => ({
-                      ...prev,
-                      [col]: { ...prev[col], [idx]: value }
-                    }));
-                  }}
-                  style={{ width: "80px", fontSize: "0.8rem" }}
-                />
-              </td>
-            );
-          }
-        } else {
-          // Render plain text for non-editable columns
-          return (
-            <td key={col}>
-              {order && order[col] !== undefined
-                ? typeof order[col] === "number"
-                  ? Number(order[col]).toLocaleString(undefined, { maximumFractionDigits: 2 })
-                  : String(order[col])
-                : ""}
-            </td>
-          );
-        }
-      })}
-    </tr>
-  ))}
-</tbody>
-<tfoot>
-  <tr>
-    {allCols.map((col) => {
-      try {
-        // Only sum numeric columns
-        const sum = ordersToRender.reduce((acc: number, order: any) => {
-          const val = order[col];
-          return typeof val === "number" && !isNaN(val) ? acc + val : acc;
-        }, 0);
-        // Show subtotal only if at least one value was numeric
-        const hasNumeric = ordersToRender.some((order: any) => typeof order[col] === "number" && !isNaN(order[col]));
-        return (
-          <td key={col} style={{ fontWeight: "bold", background: "#f7f7f7" }}>
-            {hasNumeric ? sum.toLocaleString(undefined, { maximumFractionDigits: 2 }) : ""}
-          </td>
-        );
-      } catch (e) {
-        return <td key={col}></td>;
-      }
-    })}
-  </tr>
-</tfoot>
-            </table>
-          </div>
-        );
-      })()}
-    </div>
-)}
-
-
-
-          {/* Other Fields (Text, Datetime, Array Fields) */}
-          <div className="d-flex flex-row justify-content-between">
-            {/* Text Fields Column */}
-            {textFields.length > 0 && (
-              <div className="d-flex flex-column" style={{ flex: 1, marginRight: "8px" }}>
-                {textFields.map((rule: any, index: number) => {
-                  if (sliderRules_stars.includes(rule)) return null;
-                  if (sliderRules_stars_margin.includes(rule)) return null;
-                  const isSliderRule = sliderRules.includes(rule);
-                  return (
-                    <div className="d-flex flex-column align-items-start mb-1" key={index}>
-                      <label className="mb-0" style={{ fontSize: "0.9rem" }}>
-                        {rule}:
-                        {rule === "sell_amount" && (
-                          <span
-                            style={{ marginLeft: "4px", cursor: "pointer" }}
-                            title="This amount will override sell_qty"
-                          >
-                            ❓
-                          </span>
-                        )}
-                      </label>
-                      {isSliderRule ? (
-                        <>
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step=".01"
-                            value={promptText[rule] || 0}
-                            onChange={(e) =>
-                              setPromptText({
-                                ...promptText,
-                                [rule]: Number(e.target.value),
-                              })
-                            }
-                            style={{ width: "100%" }}
-                          />
-                          <span style={{ fontSize: "0.9rem", fontWeight: "bold", marginTop: "4px" }}>
-                            {promptText[rule] || 0}
-                          </span>
-                        </>
-                      ) : (
-                        <input
-                          type="text"
-                          value={promptText[rule]}
-                          onChange={(e) =>
-                            setPromptText({
-                              ...promptText,
-                              [rule]: e.target.value,
-                            })
-                          }
-                          style={{ flex: 1, width: "100%", padding: "4px", fontSize: "0.9rem" }}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Array Fields Column */}
-            {arrayFields.length > 0 && (
-              <div className="d-flex flex-column" style={{ flex: 1 }}>
-                {arrayFields.map((rule: any, index: number) => (
-                  <div className="d-flex flex-column align-items-start mb-1" key={index}>
-                    <label className="mb-0" style={{ fontSize: "0.9rem" }}>
-                      {rule}:
-                    </label>
-                    <select
-                      value={promptText[rule][0]}
-                      onChange={(e) =>
-                        setPromptText({
-                          ...promptText,
-                          [rule]: [e.target.value],
-                        })
-                      }
-                      style={{ flex: 1, width: "100%", padding: "4px", fontSize: "0.9rem" }}
-                    >
-                      {promptText[rule].map((item: any, i: number) => (
-                        <option key={i} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Expander for sliderRules_stars */}
-            {sliderRules_stars.some((rule: any) => prompt_order_rules?.includes(rule)) && (
-              <div style={{ flex: 1, marginRight: "8px" }}>
-                <div
-                  style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
-                  onClick={() => setShowStarsSliders((prev) => !prev)}
-                >
-                  {showStarsSliders ? "▼" : "►"} Advanced Allocation Options
-                </div>
-                {showStarsSliders && (
-                  <div>
-                    {sliderRules_stars.map((rule: any, index: number) =>
-                      prompt_order_rules?.includes(rule) && promptText[rule] !== undefined && (
-                        <div className="d-flex flex-column align-items-start mb-1" key={index}>
-                          <label className="mb-0" style={{ fontSize: "0.9rem" }}>
-                            {rule}:
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step=".01"
-                            value={promptText[rule] || 0}
-                            onChange={(e) =>
-                              setPromptText({
-                                ...promptText,
-                                [rule]: Number(e.target.value),
-                              })
-                            }
-                            style={{ width: "100%" }}
-                          />
-                          <span style={{ fontSize: "0.9rem", fontWeight: "bold", marginTop: "4px" }}>
-                            {promptText[rule] || 0}
-                          </span>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Expander for sliderRules_stars_margin */}
-            {sliderRules_stars_margin.some((rule: any) => prompt_order_rules?.includes(rule)) && (
-              <div style={{ flex: 1, marginRight: "8px" }}>
-                <div
-                  style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
-                  onClick={() => setShowStarsMarginSliders((prev) => !prev)}
-                >
-                  {showStarsMarginSliders ? "▼" : "►"} Advanced Margin Allocation Options
-                </div>
-                {showStarsMarginSliders && (
-                  <div>
-                    {sliderRules_stars_margin.map((rule: any, index: number) =>
-                      prompt_order_rules?.includes(rule) && promptText[rule] !== undefined && (
-                        <div className="d-flex flex-column align-items-start mb-1" key={index}>
-                          <label className="mb-0" style={{ fontSize: "0.9rem" }}>
-                            {rule}:
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step=".01"
-                            value={promptText[rule] || 0}
-                            onChange={(e) =>
-                              setPromptText({
-                                ...promptText,
-                                [rule]: Number(e.target.value),
-                              })
-                            }
-                            style={{ width: "100%" }}
-                          />
-                          <span style={{ fontSize: "0.9rem", fontWeight: "bold", marginTop: "4px" }}>
-                            {promptText[rule] || 0}
-                          </span>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Datetime Fields Column */}
-            {datetimeFields.length > 0 && (
-              <div className="d-flex flex-column" style={{ flex: 1, marginRight: "8px" }}>
-                {datetimeFields.map((rule: any, index: number) => (
-                  <div className="d-flex flex-column align-items-start mb-1" key={index}>
-                    <label className="mb-0" style={{ fontSize: "0.9rem" }}>
-                      {rule}:
-                    </label>
+                      <span style={{ fontSize: "0.9rem", fontWeight: "bold", marginTop: "4px" }}>
+                        {promptText[rule] || 0}
+                      </span>
+                    </>
+                  ) : (
                     <input
-                      type="datetime-local"
-                      value={promptText[rule] && formatToLocalDatetime(promptText[rule])}
+                      type="text"
+                      value={promptText[rule]}
                       onChange={(e) =>
                         setPromptText({
                           ...promptText,
@@ -788,24 +329,440 @@ return (
                       }
                       style={{ flex: 1, width: "100%", padding: "4px", fontSize: "0.9rem" }}
                     />
-                  </div>
-                ))}
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Array Fields Column */}
+        {arrayFields.length > 0 && (
+          <div className="d-flex flex-column" style={{ flex: 1 }}>
+            {arrayFields.map((rule: any, index: number) => (
+              <div className="d-flex flex-column align-items-start mb-1" key={index}>
+                <label className="mb-0" style={{ fontSize: "0.9rem" }}>
+                  {rule}:
+                </label>
+                <select
+                  value={promptText[rule][0]}
+                  onChange={(e) =>
+                    setPromptText({
+                      ...promptText,
+                      [rule]: [e.target.value],
+                    })
+                  }
+                  style={{ flex: 1, width: "100%", padding: "4px", fontSize: "0.9rem" }}
+                >
+                  {promptText[rule].map((item: any, i: number) => (
+                    <option key={i} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Expander for sliderRules_stars */}
+        {sliderRules_stars.some((rule: any) => prompt_order_rules?.includes(rule)) && (
+          <div style={{ flex: 1, marginRight: "8px" }}>
+            <div
+              style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
+              onClick={() => setShowStarsSliders((prev) => !prev)}
+            >
+              {showStarsSliders ? "▼" : "►"} Advanced Allocation Options
+            </div>
+            {showStarsSliders && (
+              <div>
+                {sliderRules_stars.map((rule: any, index: number) =>
+                  prompt_order_rules?.includes(rule) && promptText[rule] !== undefined && (
+                    <div className="d-flex flex-column align-items-start mb-1" key={index}>
+                      <label className="mb-0" style={{ fontSize: "0.9rem" }}>
+                        {rule}:
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step=".01"
+                        value={promptText[rule] || 0}
+                        onChange={(e) =>
+                          setPromptText({
+                            ...promptText,
+                            [rule]: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: "100%" }}
+                      />
+                      <span style={{ fontSize: "0.9rem", fontWeight: "bold", marginTop: "4px" }}>
+                        {promptText[rule] || 0}
+                      </span>
+                    </div>
+                  )
+                )}
               </div>
             )}
           </div>
+        )}
+
+        {/* Expander for sliderRules_stars_margin */}
+        {sliderRules_stars_margin.some((rule: any) => prompt_order_rules?.includes(rule)) && (
+          <div style={{ flex: 1, marginRight: "8px" }}>
+            <div
+              style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
+              onClick={() => setShowStarsMarginSliders((prev) => !prev)}
+            >
+              {showStarsMarginSliders ? "▼" : "►"} Advanced Margin Allocation Options
+            </div>
+            {showStarsMarginSliders && (
+              <div>
+                {sliderRules_stars_margin.map((rule: any, index: number) =>
+                  prompt_order_rules?.includes(rule) && promptText[rule] !== undefined && (
+                    <div className="d-flex flex-column align-items-start mb-1" key={index}>
+                      <label className="mb-0" style={{ fontSize: "0.9rem" }}>
+                        {rule}:
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step=".01"
+                        value={promptText[rule] || 0}
+                        onChange={(e) =>
+                          setPromptText({
+                            ...promptText,
+                            [rule]: Number(e.target.value),
+                          })
+                        }
+                        style={{ width: "100%" }}
+                      />
+                      <span style={{ fontSize: "0.9rem", fontWeight: "bold", marginTop: "4px" }}>
+                        {promptText[rule] || 0}
+                      </span>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Datetime Fields Column */}
+        {datetimeFields.length > 0 && (
+          <div className="d-flex flex-column" style={{ flex: 1, marginRight: "8px" }}>
+            {datetimeFields.map((rule: any, index: number) => (
+              <div className="d-flex flex-column align-items-start mb-1" key={index}>
+                <label className="mb-0" style={{ fontSize: "0.9rem" }}>
+                  {rule}:
+                </label>
+                <input
+                  type="datetime-local"
+                  value={promptText[rule] && formatToLocalDatetime(promptText[rule])}
+                  onChange={(e) =>
+                    setPromptText({
+                      ...promptText,
+                      [rule]: e.target.value,
+                    })
+                  }
+                  style={{ flex: 1, width: "100%", padding: "4px", fontSize: "0.9rem" }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Display Grid Column Table */}
+      {display_grid_column &&
+        selectedRow &&
+        Array.isArray(selectedRow[display_grid_column]) &&
+        selectedRow[display_grid_column].length > 0 && (
+          <div style={{ margin: "16px 0" }}>
+            <div
+              style={{ cursor: "pointer", fontWeight: "bold", marginBottom: "4px" }}
+              onClick={() => setShowButtonColData((prev: boolean) => !prev)}
+            >
+              <span style={{ marginRight: "8px" }}>
+                {showButtonColData ? "▼" : "►"}
+              </span>
+              <button
+                type="button"
+                className="btn btn-link p-0"
+                style={{ fontWeight: "bold", textDecoration: "underline", color: "#007bff", background: "none", border: "none", cursor: "pointer" }}
+                onClick={() => setShowButtonColData((prev: boolean) => !prev)}
+              >
+                {display_grid_column}
+              </button>
+            </div>
+            {showButtonColData && (() => {
+              const ordersToRender = selectedRow[display_grid_column];
+              return (
+                <div style={{ overflowX: "auto" }}>
+                  <table className="table table-bordered table-sm" style={{ fontSize: "0.6rem" }}>
+<thead>
+  <tr>
+    {allCols.map((col) => {
+      const editableCol = editableCols.find(
+        (ec: { col_header: string }) => ec.col_header === col
+      );
+
+      return (
+        <th
+          key={col}
+          style={{
+            whiteSpace: "normal",
+            wordWrap: "break-word",
+            backgroundColor: "#fafcff", // Light background
+            color: "black", // Black text
+            textAlign: "center", // Center align text
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {/* Use display_name if available, otherwise fallback to col */}
+            {editableCol?.display_name || col.replace(/_/g, " ")}
+            {editableCol?.info && (
+              <span
+                style={{
+                  marginLeft: "4px",
+                  cursor: "pointer",
+                  color: "#007bff",
+                  fontSize: "0.8rem",
+                }}
+                title={editableCol.info} // Tooltip text from the "info" key
+              >
+                ❓
+              </span>
+            )}
+          </div>
+        </th>
+      );
+    })}
+  </tr>
+</thead>
+      <tbody>
+        {ordersToRender.map((order: any, idx: number) => (
+          <tr key={idx}>
+            {allCols.map((col) => {
+              const editableCol = editableCols.find((ec: { col_header: string; }) => ec.col_header === col);
+
+                      if (col === "sell_qty") {
+          // Handle sell_qty column logic
+          return (
+            <td key={col}>
+              <input
+                type="number"
+                min={0}
+                max={order.qty_available} // Limit to qty_available
+                value={editableValues[col]?.[idx] || ""}
+                onChange={(e) => {
+                  let value = e.target.value;
+                  if (value === "") {
+                    setEditableValues((prev) => ({
+                      ...prev,
+                      [col]: { ...prev[col], [idx]: "" },
+                    }));
+                    return;
+                  }
+                  let num = Number(value);
+                  if (num < 0) num = 0; // Ensure no negative values
+                  if (
+                    order.qty_available !== undefined &&
+                    num > order.qty_available
+                  )
+                    num = order.qty_available; // Limit to max qty_available
+
+                  setEditableValues((prev) => ({
+                    ...prev,
+                    [col]: { ...prev[col], [idx]: num },
+                  }));
+
+                  // Update the promptText with the updated sell_qty
+                  const updatedOrders = ordersToRender.map(
+                    (ord: any, i: number) => ({
+                      ...ord,
+                      sell_qty:
+                        i === idx
+                          ? String(num)
+                          : editableValues[col]?.[i] || "",
+                    })
+                  );
+                  setPromptText({
+                    ...promptText,
+                    active_orders_with_qty: updatedOrders,
+                  });
+                }}
+                style={{ width: "80px", fontSize: "0.8rem" }}
+              />
+            </td>
+          );
+        } else if (editableCol) {
+
+              if (editableCol.dtype === "list") {
+      // Render dropdown for dtype: "list"
+      const options = editableCol.values || []; // Use editable dictionary for dropdown options
+      return (
+        <td key={col}>
+          <select
+            value={editableValues[col]?.[idx] || ""}
+            onChange={(e) => {
+              const value = e.target.value;
+              setEditableValues((prev) => ({
+                ...prev,
+                [col]: { ...prev[col], [idx]: value },
+              }));
+            }}
+            style={{ width: "100%", fontSize: "0.8rem", padding: "4px", minWidth: "80px", }}
+          >
+            <option value="" disabled>
+              Select...
+            </option>
+            {options.map((option: string, i: number) => (
+              <option key={i} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </td>
+      );
+    }
+
+
+          // Render input for editable column
+          else if (editableCol.dtype === "checkbox") {
+            return (
+              <td key={col}>
+                <input
+                        type="checkbox"
+                        checked={!!editableValues[col]?.[idx]}
+                        onChange={e => {
+                          const value = e.target.checked;
+                          setEditableValues(prev => ({
+                            ...prev,
+                            [col]: { ...prev[col], [idx]: value }
+                          }));
+                        }}
+                      />
+                    </td>
+                  );
+                } else if (editableCol.dtype === "number") {
+                  return (
+                    <td key={col}>
+                      <input
+                        type="number"
+                        value={editableValues[col]?.[idx] || ""}
+                        onChange={e => {
+                          const value = e.target.value;
+                          setEditableValues(prev => ({
+                            ...prev,
+                            [col]: { ...prev[col], [idx]: value }
+                          }));
+                        }}
+                        style={{ width: "80px", fontSize: "0.8rem" }}
+                      />
+                    </td>
+                  );
+                }else if (editableCol.dtype === "datetime") {
+                        return (
+                          <td key={col}>
+                            <input
+                              type="datetime-local"
+                              value={editableValues[col]?.[idx] || ""}
+                              onChange={e => {
+                                const value = e.target.value;
+                                setEditableValues(prev => ({
+                                  ...prev,
+                                  [col]: { ...prev[col], [idx]: value }
+                                }));
+                              }}
+                              style={{ width: "140px", fontSize: "0.8rem" }}
+                            />
+                          </td>
+                        );
+                } else {
+                  // text
+                  return (
+                    <td key={col}>
+                      <input
+                        type="text"
+                        value={editableValues[col]?.[idx] || ""}
+                        onChange={e => {
+                          const value = e.target.value;
+                          setEditableValues(prev => ({
+                            ...prev,
+                            [col]: { ...prev[col], [idx]: value }
+                          }));
+                        }}
+                        style={{ width: "80px", fontSize: "0.8rem" }}
+                      />
+                    </td>
+                  );
+                }
+              } else {
+                // Render plain text for non-editable columns
+                return (
+                  <td key={col}>
+                    {order && order[col] !== undefined
+                      ? typeof order[col] === "number"
+                        ? Number(order[col]).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                        : String(order[col])
+                      : ""}
+                  </td>
+                );
+              }
+            })}
+          </tr>
+        ))}
+      </tbody>
+      <tfoot>
+        <tr>
+          {allCols.map((col) => {
+            try {
+              // Only sum numeric columns
+              const sum = ordersToRender.reduce((acc: number, order: any) => {
+                const val = order[col];
+                return typeof val === "number" && !isNaN(val) ? acc + val : acc;
+              }, 0);
+              // Show subtotal only if at least one value was numeric
+              const hasNumeric = ordersToRender.some((order: any) => typeof order[col] === "number" && !isNaN(order[col]));
+              return (
+                <td key={col} style={{ fontWeight: "bold", background: "#f7f7f7" }}>
+                  {hasNumeric ? sum.toLocaleString(undefined, { maximumFractionDigits: 2 }) : ""}
+                </td>
+              );
+            } catch (e) {
+              return <td key={col}></td>;
+            }
+          })}
+        </tr>
+      </tfoot>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+      )}
+
+
+
+
+      
+      
+        
         </div>
       </div>
 
 
       {/* Modal Footer */}
-      {/* <div className="modal-footer d-flex justify-content-center">
+      <div className="modal-footer d-flex justify-content-center" style={{ position: "sticky", bottom: 0,}}>
         <button type="button" className="btn btn-primary mx-2" onClick={handleOkSecond} ref={ref}>
           Ok
         </button>
         <button type="button" className="btn btn-secondary mx-2" onClick={closeModal}>
           Cancel
         </button>
-      </div> */}
+      </div>
     </div>
   </ReactModal>
 );

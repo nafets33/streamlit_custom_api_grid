@@ -3,12 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+!streamlit_custom_api_grid/frontend/build/
+!streamlit_custom_api_grid/frontend/public/
+
 # C extensions
 *.so
 
 # Distribution / packaging
 .Python
-build/
 develop-eggs/
 dist/
 downloads/

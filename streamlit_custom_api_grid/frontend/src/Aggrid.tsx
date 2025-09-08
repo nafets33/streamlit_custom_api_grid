@@ -128,6 +128,7 @@ const columnFormaters = {
   },
 }
 
+
 const HyperlinkRenderer = (props: any) => {
   const linkField = props.column.colDef["linkField"];
   const baseURL = props.column.colDef.baseURL;
@@ -269,14 +270,20 @@ const getGridOptions = () => {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [selectedColumnSetKeys, setSelectedColumnSetKeys] = useState<string[]>([]);
   const [initialColumnState, setInitialColumnState] = useState<any>(null);
-  
+
+  const [selectedCellContent, setSelectedCellContent] = useState<string | null>(null);
+
+  const onCellClicked = (event: any) => {
+    if (event.value) {
+      setSelectedCellContent(event.value); // Set the clicked cell's value
+    }
+  };
 
 useEffect(() => {
-  // if (!kwargs.api_ws) {
-  //   console.warn("api_ws is undefined, WebSocket not started.");
-  //   return;
-  // }
- // could not figure out WHY PROPS api_ws is undefined????
+  if (!kwargs.api_ws) {
+    console.warn("api_ws is undefined, WebSocket not started.");
+    return;
+  }
 
  const ws = new WebSocket(kwargs.api_ws);
    
@@ -959,6 +966,43 @@ const handleButtonFilter = (value: string | null) => {
   return (
     <>
 
+{kwargs.show_cell_content && selectedCellContent && (
+  <div
+    style={{
+      position: "absolute",
+      top: "10px",
+      right: "10px",
+      background: "white",
+      border: "1px solid #ddd",
+      borderRadius: "8px",
+      padding: "10px",
+      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
+      zIndex: 1000,
+      maxWidth: "300px", // Limit the width
+      maxHeight: "200px", // Limit the height
+      overflow: "auto", // Add scrollbars for overflow
+      width: "fit-content",
+    }}
+  >
+    <p style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+      {selectedCellContent}
+    </p>
+    <button
+      onClick={() => setSelectedCellContent(null)}
+      style={{
+        background: "#3498db",
+        color: "white",
+        border: "none",
+        borderRadius: "2px",
+        padding: "3px 5px",
+        cursor: "pointer",
+      }}
+    >
+      <h5 style={{ fontSize: "8px", margin: "0 0 6px 0" }}>x</h5>
+    </button>
+  </div>
+)}
+
 {toggle_views && toggle_views.length > 0 && (
   <>
     <div
@@ -1084,9 +1128,6 @@ const handleButtonFilter = (value: string | null) => {
         style={{ flexDirection: "row", height: "100%", width: "100%" }}
         id="myGrid"
       >
-
-
-          
 
 
         <div className="d-flex justify-content-between align-items-center">
@@ -1382,6 +1423,7 @@ const handleButtonFilter = (value: string | null) => {
             onCellValueChanged={onCellValueChanged}
             columnTypes={columnTypes}
             sideBar={grid_options.sideBar === false ? false : sideBar}
+            onCellClicked={onCellClicked} // Attach the handler here
           />
         </div>
       </div>
