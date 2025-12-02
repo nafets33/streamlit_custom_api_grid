@@ -5,9 +5,8 @@ A Streamlit custom component that provides customizable grids with API integrati
 ## Features
 
 - Customizable grid options
-- API integration for data handling
-- Pagination, sorting, and filtering
-- Modern UI with themes
+- API integration -- You need to run a backend API (FastAPI)
+- seperate component via api
 
 ## Installation
 
