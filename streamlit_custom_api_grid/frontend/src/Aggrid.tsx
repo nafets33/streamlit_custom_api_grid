@@ -44,8 +44,8 @@ import {
 import { deepMap } from "./utils"
 
 const isDev = process.env.NODE_ENV === 'development';
-const log = isDev ? console.log : () => {};
-const warn = isDev ? console.warn : () => {};
+const log = isDev ? console.log : () => { };
+const warn = isDev ? console.warn : () => { };
 const error = console.error; // Always log errors
 
 type Props = {
@@ -256,6 +256,7 @@ const AgGrid = (props: Props) => {
   } = props
   let { grid_options = {} } = props
 
+
   //parsing must be done here. For some unknow reason if its moved after the
   //button mapping, deepMap gets lots of React objects (api, symbolRefs, etc.)
   //this impacts performance and crashes the grid.
@@ -263,9 +264,8 @@ const AgGrid = (props: Props) => {
     grid_options = deepMap(grid_options, parseJsCodeFromPython, ["rowData"])
   }
 
-  const [subtotalsRow, setSubtotalsRow] = useState<any[]>([]);
   let { buttons, toggle_views, api_key, api_lastmod_key = null, columnOrder = [],
-    refresh_success = null, total_col = false, subtotal_cols = [], filter_button = '' } = kwargs
+    refresh_success = null, filter_button = '' } = kwargs
   const [rowData, setRowData] = useState<any[]>([])
   const [modalShow, setModalshow] = useState(false)
   const [modalData, setModalData] = useState({})
@@ -278,201 +278,225 @@ const AgGrid = (props: Props) => {
   const [initialColumnState, setInitialColumnState] = useState<any>(null);
 
   const [selectedCellContent, setSelectedCellContent] = useState<string | null>(null);
-
+const [pinnedBottomData, setPinnedBottomData] = useState<any[]>(grid_options.pinnedBottomRowData || []);
   const onCellClicked = (event: any) => {
     if (event.value) {
       setSelectedCellContent(event.value); // Set the clicked cell's value
     }
   };
 
-// Replace lines 282-408 (the entire WebSocket useEffect)
+  // Replace lines 282-408 (the entire WebSocket useEffect)
 
-useEffect(() => {
-  if (!kwargs.api_ws) {
-    console.warn("⚠️  api_ws is undefined, WebSocket not started.");
-    return;
-  }
+  useEffect(() => {
+    if (!kwargs.api_ws) {
+      log("⚠️  api_ws is undefined, WebSocket not started.");
+      return;
+    }
 
-  log("🔌 Attempting WebSocket connection to:", kwargs.api_ws);
-  
-  let ws: WebSocket | null = null;
-  let reconnectTimeout: NodeJS.Timeout;
-  let heartbeatInterval: NodeJS.Timeout;
-  let isIntentionallyClosed = false;
-  let reconnectAttempts = 0;
-  const MAX_RECONNECT_ATTEMPTS = 10;
-  const HEARTBEAT_INTERVAL = 30000; // 30 seconds
-  const RECONNECT_DELAY = 3000; // 3 seconds
+    log("🔌 Attempting WebSocket connection to:", kwargs.api_ws);
 
-  const connectWebSocket = () => {
-    try {
-      ws = new WebSocket(kwargs.api_ws);
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout;
+    let heartbeatInterval: NodeJS.Timeout;
+    let isIntentionallyClosed = false;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const HEARTBEAT_INTERVAL = 300000; // 5 minutes
+    const RECONNECT_DELAY = 3000; // 3 seconds
 
-      ws.onopen = () => {
-        log("✅ WebSocket connected!");
-        reconnectAttempts = 0;
-        
-        const handshake = {
-          username: username,
-          toggle_view_selection: toggle_views ? toggle_views[viewId] : 'queen',
-          api_key: api_key,
+    const connectWebSocket = () => {
+      try {
+        ws = new WebSocket(kwargs.api_ws);
+
+        ws.onopen = () => {
+          log("✅ WebSocket connected!");
+          reconnectAttempts = 0;
+
+          const handshake = {
+            username: username,
+            toggle_view_selection: toggle_views ? toggle_views[viewId] : 'queen',
+            api_key: api_key,
+            prod: prod,
+          };
+
+          log("📤 Sending handshake:", handshake);
+          ws?.send(JSON.stringify(handshake));
+
+          // // ✅ Start heartbeat
+          startHeartbeat();
         };
-        
-        log("📤 Sending handshake:", handshake);
-        ws?.send(JSON.stringify(handshake));
 
-        // ✅ Start heartbeat
-        startHeartbeat();
-      };
+        ws.onmessage = (event) => {
+          log("📥 WebSocket message received");
+          try {
+            const data = JSON.parse(event.data);
 
-ws.onmessage = (event) => {
-  log("📥 WebSocket message received");
-  try {
-    const data = JSON.parse(event.data);
-    
-    // ✅ Handle pong response
-    if (data.type === 'pong') {
-      log("💓 Heartbeat acknowledged");
-      return;
-    }
-    
-    // Handle connection confirmation
-    if (data.type === 'connection_established') {
-      log("✅ Handshake confirmed:", data.message);
-      return;
-    }
-    
-    // ✅ Handle array of updates (batch)
-if (Array.isArray(data) && data.length > 0) {
-  // log(`📥 Received ${data.length} row updates`);
-  // log("📦 First update sample:", JSON.stringify(data[0], null, 2));
-  
-  const rowsToUpdate: any[] = [];
-  
-  data.forEach(({ row_id, updates }) => {
-    const existingNode = gridRef.current?.api.getRowNode(row_id);
-    if (existingNode && existingNode.data) {
-      // log(`🔍 Existing data for ${row_id}:`, existingNode.data);
-      // log(`📨 Updates for ${row_id}:`, updates);
-      
-      // ✅ Start with existing data to preserve everything
-      const updatedRow = { ...existingNode.data };
-      
-      // ✅ Apply only the updates from WebSocket
-      Object.keys(updates).forEach(key => {
-        updatedRow[key] = updates[key];
-      });
-      
-      // ✅ Ensure index is preserved
-      updatedRow[index] = row_id;
-      
-      // log(`✅ Final row for ${row_id}:`, updatedRow);
-      rowsToUpdate.push(updatedRow);
-    } else {
-      log("⚠️  Row not found for update:", row_id);
-    }
-  });
-  
-  // Apply all updates in ONE transaction
-  if (rowsToUpdate.length > 0) {
-    gridRef.current?.api.applyTransaction({
-      update: rowsToUpdate
-    });
-    log(`✅ Updated ${rowsToUpdate.length} rows`);
-    
-    // Recalculate subtotals if needed
-    if (subtotal_cols && subtotal_cols.length > 0) {
-      setTimeout(() => calculateSubtotals(), 100);
-    }
-  }
-}
-  } catch (error) {
-    console.error("❌ Error processing WebSocket message:", error);
-  }
-};
+            // Handle pong response
+            if (data.type === 'pong') {
+              log("💓 Heartbeat acknowledged");
+              return;
+            }
 
-      ws.onerror = (error) => {
-        console.error("❌ WebSocket error:", error);
+            // Handle connection confirmation
+            if (data.type === 'connection_established') {
+              log("Handshake confirmed:", data.message, prod);
+              return;
+            }
+
+            // Handle array of updates (batch)
+            if (Array.isArray(data) && data.length > 0) {
+              // log(`📥 Received ${data.length} row updates`);
+              // log("📦 First update sample:", JSON.stringify(data[0], null, 2));
+
+              const rowsToUpdate: any[] = [];
+
+              data.forEach(({ row_id, updates }) => {
+                const existingNode = gridRef.current?.api.getRowNode(row_id);
+                if (existingNode && existingNode.data) {
+                  // log(`🔍 Existing data for ${row_id}:`, existingNode.data);
+                  // log(`📨 Updates for ${row_id}:`, updates);
+
+                  // Start with existing data to preserve everything
+                  const updatedRow = { ...existingNode.data };
+
+                  // Apply only the updates from WebSocket
+                  Object.keys(updates).forEach(key => {
+                    updatedRow[key] = updates[key];
+                  });
+
+                  // Ensure index is preserved
+                  updatedRow[index] = row_id;
+
+                  rowsToUpdate.push(updatedRow);
+                } else {
+                  log("⚠️  Row not found for update:", row_id);
+                }
+              });
+
+              // Apply all updates in ONE transaction
+              if (rowsToUpdate.length > 0) {
+                gridRef.current?.api.applyTransaction({
+                  update: rowsToUpdate
+                });
+                log(`✅ Updated ${rowsToUpdate.length} rows`);
+
+                // ✅ Recalculate and update pinned bottom row
+                if (kwargs.subtotal_cols && kwargs.subtotal_cols.length > 0 && gridRef.current?.api) {
+                  const api = gridRef.current.api;
+                  let filteredRows: any[] = [];
+api.forEachNodeAfterFilterAndSort((node) => {
+  if (node.data && !node.rowPinned) filteredRows.push(node.data);
+});
+
+                  let subtotal: any = { [index]: "subTotals" };
+
+                  kwargs.subtotal_cols.forEach((col: string) => {
+                    const sum = filteredRows.reduce((sum, row) => {
+                      let val = row[col];
+                      if (typeof val === "string" && val.includes("$")) {
+                        const match = val.match(/\$([\d,.\-]+)/);
+                        if (match && match[1]) {
+                          val = match[1].replace(/,/g, "");
+                        }
+                      }
+                      const num = Number(val);
+                      return sum + (isNaN(num) ? 0 : num);
+                    }, 0);
+                    subtotal[col] = isNaN(sum) ? "" : sum;
+                  });
+
+                  // Update the pinned bottom row
+                  api.setPinnedBottomRowData([subtotal]);
+                }
+              }
+            }
+          } catch (error) {
+            console.error("❌ Error processing WebSocket message:", error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error("❌ WebSocket error:", error);
+          stopHeartbeat();
+        };
+
+        ws.onclose = (event) => {
+          log("🔌 WebSocket closed:", {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+          });
+
+          stopHeartbeat();
+
+          // ✅ Auto-reconnect
+          if (!isIntentionallyClosed) {
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+              reconnectAttempts++;
+              log(`🔄 Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${RECONNECT_DELAY / 1000}s...`);
+
+              reconnectTimeout = setTimeout(() => {
+                log("🔄 Reconnecting WebSocket...");
+                connectWebSocket();
+              }, RECONNECT_DELAY);
+            } else {
+              console.error("❌ Max reconnection attempts reached. Please refresh the page.");
+              toastr.error("WebSocket connection lost. Please refresh the page.");
+            }
+          }
+        };
+      } catch (error) {
+        console.error("❌ Error creating WebSocket:", error);
         stopHeartbeat();
-      };
+      }
+    };
 
-      ws.onclose = (event) => {
-        log("🔌 WebSocket closed:", {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean
-        });
-        
-        stopHeartbeat();
-        
-        // ✅ Auto-reconnect
-        if (!isIntentionallyClosed) {
-          if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            reconnectAttempts++;
-            log(`🔄 Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${RECONNECT_DELAY/1000}s...`);
-            
-            reconnectTimeout = setTimeout(() => {
-              log("🔄 Reconnecting WebSocket...");
-              connectWebSocket();
-            }, RECONNECT_DELAY);
-          } else {
-            console.error("❌ Max reconnection attempts reached. Please refresh the page.");
-            toastr.error("WebSocket connection lost. Please refresh the page.");
+    // ✅ Heartbeat to keep connection alive
+    const startHeartbeat = () => {
+      stopHeartbeat();
+
+      heartbeatInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          log("💓 Sending heartbeat ping...");
+          try {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          } catch (error) {
+            console.error("❌ Failed to send heartbeat:", error);
+            stopHeartbeat();
+          }
+        } else {
+          console.warn("⚠️  WebSocket not open during heartbeat");
+          stopHeartbeat();
+
+          if (!isIntentionallyClosed && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            log("🔄 Connection lost, attempting to reconnect...");
+            connectWebSocket();
           }
         }
-      };
-    } catch (error) {
-      console.error("❌ Error creating WebSocket:", error);
-      stopHeartbeat();
-    }
-  };
+      }, HEARTBEAT_INTERVAL);
+    };
 
-  // ✅ Heartbeat to keep connection alive
-  const startHeartbeat = () => {
-    stopHeartbeat();
-    
-    heartbeatInterval = setInterval(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        log("💓 Sending heartbeat ping...");
-        try {
-          ws.send(JSON.stringify({ type: 'ping' }));
-        } catch (error) {
-          console.error("❌ Failed to send heartbeat:", error);
-          stopHeartbeat();
-        }
-      } else {
-        console.warn("⚠️  WebSocket not open during heartbeat");
-        stopHeartbeat();
-        
-        if (!isIntentionallyClosed && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          log("🔄 Connection lost, attempting to reconnect...");
-          connectWebSocket();
-        }
+    const stopHeartbeat = () => {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = undefined as any;
       }
-    }, HEARTBEAT_INTERVAL);
-  };
+    };
 
-  const stopHeartbeat = () => {
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = undefined as any;
-    }
-  };
+    // Initial connection
+    connectWebSocket();
 
-  // Initial connection
-  connectWebSocket();
-
-  // Cleanup
-  return () => {
-    log("🧹 Cleaning up WebSocket connection");
-    isIntentionallyClosed = true;
-    stopHeartbeat();
-    clearTimeout(reconnectTimeout);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.close();
-    }
-  };
-}, [kwargs.api_ws, index, viewId, username, api_key, subtotal_cols, toggle_views]);
+    // Cleanup
+    return () => {
+      log("🧹 Cleaning up WebSocket connection");
+      isIntentionallyClosed = true;
+      stopHeartbeat();
+      clearTimeout(reconnectTimeout);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    };
+  }, [kwargs.api_ws, index, viewId, username, api_key, toggle_views]);
 
   const checkLastModified = async (): Promise<boolean> => {
     try {
@@ -565,7 +589,14 @@ if (Array.isArray(data) && data.length > 0) {
             ...(button.cellRendererParams || {}),
             clicked: async function (row_index: any) {
               try {
-                const selectedRow = g_rowdata.find((row) => row[index] === row_index);
+                // const selectedRow = g_rowdata.find((row) => row[index] === row_index);
+                const freshNode = gridRef.current?.api.getRowNode(row_index);
+                if (!freshNode?.data) {
+                  console.error("❌ Could not find fresh row data for:", row_index);
+                  toastr.error("Could not load row data");
+                  return;
+                }
+                const selectedRow = freshNode.data;
                 if (prompt_order_rules) {
                   const str = selectedRow[prompt_field];
                   const selectedField =
@@ -582,11 +613,13 @@ if (Array.isArray(data) && data.length > 0) {
 
                   setModalshow(true);
                   setModalData({
+                    gridRef: gridRef,           // ✅ Pass grid reference
+                    index: index,               // ✅ Pass index
                     prompt_message,
                     button_api: button_api,
                     username: username,
                     prod: prod,
-                    selectedRow: selectedRow,
+                    selectedRow: selectedRow,   // ✅ Fresh data from grid
                     kwargs: kwargs,
                     prompt_field,
                     prompt_order_rules,
@@ -605,14 +638,17 @@ if (Array.isArray(data) && data.length > 0) {
                 } else if (prompt_field && prompt_message) {
                   setModalshow(true);
                   setModalData({
+                    gridRef: gridRef,           // Pass grid reference
+                    index: index,               // Pass index
                     prompt_message,
                     button_api: button_api,
                     username: username,
                     prod: prod,
-                    selectedRow: selectedRow,
+                    selectedRow: selectedRow,   // Fresh data from grid
                     kwargs: kwargs,
                   });
                   setPromptText(selectedRow[prompt_field]);
+                  setModalshow(true)
                 } else {
                   if (window.confirm(prompt_message)) {
                     await axios.post(button_api, {
@@ -702,133 +738,27 @@ if (Array.isArray(data) && data.length > 0) {
     }
   };
 
-  /// for title outside grid
-  // const [subtotals, setSubtotals] = useState<any>(null);
 
-  // const calculateSubtotals = useCallback(() => {
-  //   if (!gridRef.current) return;
-  //   if (!subtotal_cols || subtotal_cols.length === 0) {
-  //     setSubtotals(null);
-  //     return;
-  //   }
-  //   const api = gridRef.current.api;
-  //   let filteredRows: any[] = [];
-  //   api.forEachNodeAfterFilterAndSort((node) => {
-  //     if (node.data) filteredRows.push(node.data);
-  //   });
-
-  //   if (filteredRows.length === 0) {
-  //     setSubtotals(null);
-  //     return;
-  //   }
-
-  //   let subtotal: any = {};
-  //   subtotal[total_col] = "Subtotal";
-  //   subtotal_cols.forEach((col: string) => {
-  //     subtotal[col] = filteredRows.reduce((sum, row) => sum + (Number(row[col]) || 0), 0);
-  //   });
-
-  //   setSubtotals(subtotal);
-  // }, [subtotal_cols, total_col]);
-  // const onFilterChanged = useCallback(() => {
-  //   calculateSubtotals();
-  // }, [calculateSubtotals]);
-
-  // const [subtotalsRow, setSubtotalsRow] = useState<any[]>([]);
-
-  const calculateSubtotals = useCallback(() => {
-    if (!gridRef.current) return;
-    if (!subtotal_cols || subtotal_cols.length === 0) {
-      setSubtotalsRow([]);
-      return;
-    }
-    const api = gridRef.current.api;
-    let filteredRows: any[] = [];
-    api.forEachNodeAfterFilterAndSort((node) => {
-      if (node.data) filteredRows.push(node.data);
-    });
-
-
-    if (filteredRows.length === 0) {
-      setSubtotalsRow([]);
-      return;
-    }
-
-    let subtotal: any = {};
-    // Ensure total_col is a valid string and exists in the columns
-    let allCols: string[] = [];
-    if (grid_options && grid_options.columnDefs) {
-      allCols = grid_options.columnDefs.map((colDef: any) => colDef.field).filter(Boolean);
-    } else if (filteredRows.length > 0) {
-      allCols = Object.keys(filteredRows[0]);
-    }
-
-    // Place "subTotals" label in the correct column
-    if (typeof total_col === "string" && allCols.includes(total_col)) {
-      subtotal[total_col] = "subTotals";
-    } else if (allCols.length > 0) {
-      subtotal[allCols[0]] = "subTotals"; // fallback to first column
-    }
-
-
-
-    // Add button columns if not already present
-    if (Array.isArray(buttons)) {
-      buttons.forEach((btn: any) => {
-        if (btn.col_header && btn.cellStyle) {
-          subtotal[`${btn.col_header}_cellStyle`] = btn.cellStyle;
-        }
-      });
-    }
-
-    allCols.forEach((col: string) => {
-      if (subtotal_cols.includes(col)) {
-        // Try to split by $ and sum the numeric part if possible
-        const sum = filteredRows.reduce((sum, row) => {
-          let val = row[col];
-          if (typeof val === "string" && val.includes("$")) {
-            // Try to extract number after $
-            const match = val.match(/\$([\d,.\-]+)/);
-            if (match && match[1]) {
-              val = match[1].replace(/,/g, "");
-            }
-          }
-          const num = Number(val);
-          return sum + (isNaN(num) ? 0 : num);
-        }, 0);
-        subtotal[col] = isNaN(sum) ? "" : sum;
-      } else if (subtotal[total_col] !== "subTotals" || col !== total_col) {
-        subtotal[col] = ""; // or null, or a placeholder
+  useEffect(() => {
+    // ✅ Only poll if WebSocket is NOT available
+    if (!api_ws && refresh_sec && refresh_sec > 0) {
+      log("📡 Starting polling (no WebSocket available)");
+      const interval = setInterval(fetchAndSetData, refresh_sec * 1000)
+      let timeout: NodeJS.Timeout
+      if (refresh_cutoff_sec > 0) {
+        timeout = setTimeout(() => {
+          clearInterval(interval)
+          log("⏹️ Polling stopped (cutoff reached)")
+        }, refresh_cutoff_sec * 1000)
       }
-    });
-
-    setSubtotalsRow([subtotal]);
-  }, [subtotal_cols, total_col]);
-  
-  const onFilterChanged = useCallback(() => {
-    calculateSubtotals();
-  }, [calculateSubtotals]);
-
-useEffect(() => {
-  // ✅ Only poll if WebSocket is NOT available
-  if (!api_ws && refresh_sec && refresh_sec > 0) {
-    log("📡 Starting polling (no WebSocket available)");
-    const interval = setInterval(fetchAndSetData, refresh_sec * 1000)
-    let timeout: NodeJS.Timeout
-    if (refresh_cutoff_sec > 0) {
-      timeout = setTimeout(() => {
+      return () => {
         clearInterval(interval)
-        log("⏹️ Polling stopped (cutoff reached)")
-      }, refresh_cutoff_sec * 1000)
+        if (timeout) clearTimeout(timeout)
+      }
+    } else if (api_ws) {
+      log("🔌 WebSocket active, polling disabled");
     }
-    return () => {
-      clearInterval(interval)
-      if (timeout) clearTimeout(timeout)
-    }
-  } else if (api_ws) {
-    log("🔌 WebSocket active, polling disabled");
-  }
-}, [api_ws, refresh_sec, refresh_cutoff_sec, props, viewId])
+  }, [api_ws, refresh_sec, refresh_cutoff_sec, props, viewId])
 
 
 
@@ -862,11 +792,7 @@ useEffect(() => {
         setRowData(array);
         g_rowdata = array;
 
-        if (subtotal_cols && subtotal_cols.length > 0) {
-          calculateSubtotals();
-        } else {
-          setSubtotalsRow([]);
-        }
+
         // Autosize all columns after data is set
         autoSizeAll(true);
 
@@ -887,12 +813,12 @@ useEffect(() => {
     }
   }, [])
 
-const getRowId = useMemo<GetRowIdFunc>(() => {
-  return (params: GetRowIdParams) => {
-    // ✅ Always return a string
-    return String(params.data[index]);
-  }
-}, [index])
+  const getRowId = useMemo<GetRowIdFunc>(() => {
+    return (params: GetRowIdParams) => {
+      // ✅ Always return a string
+      return String(params.data[index]);
+    }
+  }, [index])
 
   const sideBar = useMemo<
     SideBarDef | string | string[] | boolean | null
@@ -1076,9 +1002,7 @@ const getRowId = useMemo<GetRowIdFunc>(() => {
   }
 
   const getRowStyle = (params: RowClassParams<any>): RowStyle | undefined => {
-    if (params.data && params.data[total_col] === "subTotals") {
-      return { fontWeight: "bold", background: "#f8f8f8" }; // Add background if you want
-    }
+
     try {
       const background = params.data["color_row"] ?? undefined;
       const color = params.data["color_row_text"] ?? undefined;
@@ -1299,7 +1223,11 @@ const getRowId = useMemo<GetRowIdFunc>(() => {
       <MyModal
         isOpen={modalShow}
         closeModal={() => setModalshow(false)}
-        modalData={modalData}
+        modalData={{
+          ...modalData,
+          index: index,        // ✅ Pass index
+          gridRef: gridRef     // ✅ Pass grid reference
+        }}
         promptText={promptText}
         setPromptText={setPromptText}
         toastr={toastr}
@@ -1589,8 +1517,7 @@ const getRowId = useMemo<GetRowIdFunc>(() => {
           <AgGridReact
             ref={gridRef}
             rowData={rowData}
-            pinnedBottomRowData={subtotalsRow}
-            onFilterChanged={onFilterChanged}
+            pinnedBottomRowData={pinnedBottomData}
             getRowStyle={getRowStyle}
             // rowStyle={{ fontSize: kwargs.fontSize ? kwargs.fontSize : 12, padding: 0 }}
             headerHeight={30}
