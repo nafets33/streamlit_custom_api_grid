@@ -54,7 +54,7 @@ class GridOptionsBuilder:
             sortable = sorteable
 
         defaultColDef = {
-            "initialWidth": column_width,
+            # "initialWidth": column_width,
             "editable": editable,
             "filter": filterable,
             "resizable": resizable,

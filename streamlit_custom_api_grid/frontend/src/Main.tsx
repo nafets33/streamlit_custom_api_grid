@@ -14,8 +14,6 @@ const Main = (props: ComponentProps) => {
     username,
     api,
     api_update,
-    refresh_sec,
-    refresh_cutoff_sec,
     gridoption_build,
     enable_JsCode,
     prod,
@@ -30,8 +28,6 @@ const Main = (props: ComponentProps) => {
         username={username}
         api={api}
         api_update={api_update}
-        refresh_sec={refresh_sec}
-        refresh_cutoff_sec={refresh_cutoff_sec}
         gridoption_build={gridoption_build}
         prod={prod}
         grid_options={grid_options}

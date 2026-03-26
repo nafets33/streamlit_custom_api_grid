@@ -22,7 +22,8 @@ import { format } from "date-fns-tz"
 import { duration } from "moment"
 import "./styles.css"
 import axios from "axios"
-// import Ozz from "./components/VoiceChatModal";
+import Ozz from "./components/VoiceChatModal";
+import TickerSearchModal from "./components/TickerSearchModal";
 
 import {
   ComponentProps,
@@ -53,8 +54,6 @@ type Props = {
   api: string
   api_update: string
   api_ws?: string
-  refresh_sec?: number
-  refresh_cutoff_sec?: number
   gridoption_build?: any
   prod?: boolean
   grid_options?: any
@@ -154,13 +153,27 @@ const HyperlinkRenderer = (props: any) => {
 
 
 toastr.options = {
-  positionClass: "toast-top-full-width",
+  positionClass: "toast-middle-center",
   hideDuration: 300,
   timeOut: 3000,
 }
 
 
 // On Filter Headers Add right section for Quant AI form Handle full screen with chat session Can we lanuch custom_VoiceGPT to it? Import ...
+function interpolateHexColor(minColor: string, maxColor: string, ratio: number): string {
+  const parseHex = (hex: string) => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+  const [r1, g1, b1] = parseHex(minColor);
+  const [r2, g2, b2] = parseHex(maxColor);
+  const r = Math.round(r1 + (r2 - r1) * ratio);
+  const g = Math.round(g1 + (g2 - g1) * ratio);
+  const b = Math.round(b1 + (b2 - b1) * ratio);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 
 const AgGrid = (props: Props) => {
   const BtnCellRenderer = (props: any) => {
@@ -169,14 +182,114 @@ const AgGrid = (props: Props) => {
     };
     if (!props || !props.node) return null;
     if (props.node.rowPinned === 'bottom') {
-      return <span>{props.value}</span>;
+      return <span style={{ fontWeight: 'bold' }}>{props.value}</span>;
     }
-    // Use subtotal row style if present
+
+    // ✅ Original subtotalStyle — unchanged, used for all non-wave buttons
     const subtotalStyle =
       props.data && props.col_header && props.data[`${props.col_header}_cellStyle`]
         ? props.data[`${props.col_header}_cellStyle`]
         : props.cellStyle;
 
+    // Detect wave format: "buy(4) $19,690" or "sell(3) $5,000"
+    const waveMatch = typeof props.value === 'string'
+      ? props.value.match(/^(buy|sell)\((\d+)\)\s*\$([0-9,.\-]+)/i)
+      : null;
+
+    if (waveMatch) {
+      const action = waveMatch[1];
+      const length = waveMatch[2];
+      const amount = waveMatch[3];
+      const amountNum = parseFloat(amount.replace(/,/g, ''));
+      const actionDisplay = action.charAt(0).toUpperCase() + action.slice(1);
+      const isBuy = action.toLowerCase().includes('buy');
+
+      // ✅ Find max position value across ALL rows in this column
+      let maxAmount = 0;
+      if (props.api && props.colDef?.field) {
+        props.api.forEachNode((node: any) => {
+          if (node.data) {
+            const val = node.data[props.colDef.field];
+            if (typeof val === 'string') {
+              const m = val.match(/^(?:buy|sell)\(\d+\)\s*\$([0-9,.\-]+)/i);
+              if (m && m[1]) {
+                const n = parseFloat(m[1].replace(/,/g, ''));
+                if (!isNaN(n) && n > maxAmount) maxAmount = n;
+              }
+            }
+          }
+        });
+      }
+
+      const ratio = maxAmount > 0 ? Math.min(amountNum / maxAmount, 1) : 0;
+
+      // ✅ Get colors from kwargs.wave_color_rules or use defaults
+      const waveColorRules = kwargs.wave_color_rules || {
+        buy: {
+          textColor: '#0a6e1f',
+          borderColor: '#0a9d25',
+          bgColorMin: '#f3f3f0',
+          bgColorMax: '#656560',
+        },
+        sell: {
+          textColor: '#a00000',
+          borderColor: '#ed370f',
+          bgColorMin: '#f9f9f7',
+          bgColorMax: '#474742',
+        },
+        position: {
+          textColor: '#000000'
+        }
+      };
+
+      const colorSet = isBuy ? waveColorRules.buy : waveColorRules.sell;
+
+      // ✅ Text color: from kwargs or fixed green/red based on action
+      const borderColor = colorSet.borderColor;
+
+      const textColorWave = colorSet.textColor;   // green/red for Wave line
+      const textColorPosition = waveColorRules.position?.textColor || '#121111cc';  // black for Position line
+
+      // ✅ Background: light blue → darker blue heat map
+      const bgColor = interpolateHexColor(
+        colorSet.bgColorMin || 'rgb(161, 228, 139)',
+        colorSet.bgColorMax || 'rgb(201, 182, 31)',
+        ratio
+      );
+
+      return (
+        <button
+          onClick={btnClickedHandler}
+          style={{
+            background: `radial-gradient(ellipse at center, #ffffff 65%, ${bgColor} 85%)`,
+            border: "2px solid " + borderColor,
+            borderRadius: "0",
+            width: "100%",
+            height: "100%",
+            cursor: "pointer",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: "1.3",
+            padding: "1px 2px",
+            boxSizing: "border-box",
+            outline: "none",
+          }}
+        >
+          <div style={{ fontSize: "13px", whiteSpace: "nowrap" }}>
+            <span style={{ fontWeight: "bold", color: textColorWave }}></span>
+            <span style={{ fontWeight: "normal", color: textColorWave }}>{actionDisplay}({length})</span>
+          </div>
+          <div style={{ fontSize: "13px", whiteSpace: "nowrap" }}>
+            <span style={{ fontWeight: "bold", color: textColorPosition }}>$: </span>
+            <span style={{ fontWeight: "normal", color: textColorPosition }}>{amount}</span>
+          </div>
+        </button>
+      );
+    }
+
+    // ✅ All other buttons — exactly as original
     return (
       <button
         onClick={btnClickedHandler}
@@ -192,6 +305,7 @@ const AgGrid = (props: Props) => {
       </button>
     );
   };
+
   function buildDetailGridOptions(detailGridOptions: any, level: number): any {
     const options = { ...detailGridOptions, masterDetail: true };
 
@@ -217,7 +331,6 @@ const AgGrid = (props: Props) => {
 
     return options;
   }
-
   const getGridOptions = () => {
     let options = { ...grid_options };
     if (kwargs.nestedGridEnabled && kwargs.detailGridOptions) {
@@ -248,8 +361,6 @@ const AgGrid = (props: Props) => {
     api,
     api_update,
     api_ws = undefined,
-    refresh_sec = undefined,
-    refresh_cutoff_sec = 0,
     prod = true,
     index,
     enable_JsCode,
@@ -257,14 +368,12 @@ const AgGrid = (props: Props) => {
   } = props
   let { grid_options = {} } = props
 
-
   //parsing must be done here. For some unknow reason if its moved after the
   //button mapping, deepMap gets lots of React objects (api, symbolRefs, etc.)
   //this impacts performance and crashes the grid.
   if (enable_JsCode) {
     grid_options = deepMap(grid_options, parseJsCodeFromPython, ["rowData"])
   }
-
   let { buttons, toggle_views, api_key, api_lastmod_key = null, columnOrder = [],
     refresh_success = null, filter_button = '' } = kwargs
   const [rowData, setRowData] = useState<any[]>([])
@@ -274,17 +383,70 @@ const AgGrid = (props: Props) => {
   const [viewId, setViewId] = useState(0)
   const [lastModified, setLastModified] = useState<string | null>(null);
   const [previousViewId, setpreviousViewId] = useState(89)
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [selectedColumnSetKey, setSelectedColumnSetKey] = useState<string | null>(null);
   const [initialColumnState, setInitialColumnState] = useState<any>(null);
-
+  const [tickerSearchModalShow, setTickerSearchModalShow] = useState(false);
   const [selectedCellContent, setSelectedCellContent] = useState<string | null>(null);
-  const onCellClicked = (event: any) => {
+  const onCellClicked = useCallback((event: any) => {
     if (event.value) {
       setSelectedCellContent(event.value); // Set the clicked cell's value
     }
+  }, []);
+
+  const [wsModalShow, setWsModalShow] = useState(false);
+  const [wsModalData, setWsModalData] = useState<any>({});
+
+  const [wsModalShow_two, setWsModalShow_two] = useState(false);
+  const [wsModalData_two, setWsModalData_two] = useState<any>({});
+
+  const [activeFilter, setActiveFilter] = useState<Record<string, string[]>>({});
+  const [filtersExpanded, setFiltersExpanded] = useState(true);
+
+  const buildDeltaFlashInfo = (
+    row_id: string,
+    existingData: Record<string, any>,
+    updates: Record<string, any>
+  ): Record<string, { direction: 'positive' | 'negative' }> => {
+    const flashFields: Record<string, { direction: 'positive' | 'negative' }> = {};
+    Object.keys(updates).forEach(key => {
+      const columnDef = gridRef.current?.api.getColumnDef(key);
+      const flashEnabled = columnDef?.enableCellChangeFlash === true;
+      const hasAgAnimate = columnDef?.cellRenderer === 'agAnimateShowChangeCellRenderer';
+      if (flashEnabled && !hasAgAnimate) {
+        const oldNum = parseFloat(existingData[key]);
+        const newNum = parseFloat(updates[key]);
+        if (!isNaN(oldNum) && !isNaN(newNum) && oldNum !== newNum) {
+          flashFields[key] = { direction: newNum > oldNum ? 'positive' : 'negative' };
+        }
+      }
+    });
+    return flashFields;
   };
 
+  const applyDeltaFlashAnimations = (
+    rowsToUpdate: any[],
+    deltaFlashInfo: Record<string, Record<string, { direction: 'positive' | 'negative' }>>
+  ) => {
+    requestAnimationFrame(() => {
+      rowsToUpdate.forEach(row => {
+        const rowId = row[index];
+        if (deltaFlashInfo[rowId]) {
+          Object.keys(deltaFlashInfo[rowId]).forEach(field => {
+            const { direction } = deltaFlashInfo[rowId][field];
+            const cellElement = document.querySelector(
+              `.ag-row[row-id="${rowId}"] .ag-cell[col-id="${field}"]`
+            );
+            if (cellElement) {
+              cellElement.classList.remove('flash-positive', 'flash-negative');
+              void (cellElement as HTMLElement).offsetWidth;
+              cellElement.classList.add(`flash-${direction}`);
+              setTimeout(() => cellElement.classList.remove(`flash-${direction}`), 1000);
+            }
+          });
+        }
+      });
+    });
+  };
 
   useEffect(() => {
     if (!kwargs.api_ws) {
@@ -298,8 +460,9 @@ const AgGrid = (props: Props) => {
     let reconnectTimeout: NodeJS.Timeout;
     let heartbeatInterval: NodeJS.Timeout;
     let isIntentionallyClosed = false;
+    let isTabHidden = false;
     let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 10;
+    const MAX_RECONNECT_ATTEMPTS = 50;
     const HEARTBEAT_INTERVAL = 300000; // 5 minutes
     const RECONNECT_DELAY = 3000; // 3 seconds
 
@@ -342,50 +505,145 @@ const AgGrid = (props: Props) => {
               return;
             }
 
-            // Handle array of updates (batch)
-            if (Array.isArray(data) && data.length > 0) {
-              // log(`📥 Received ${data.length} row updates`);
-              // log("📦 First update sample:", JSON.stringify(data[0], null, 2));
+            if (Array.isArray(data.action_orders) && data.action_orders.length > 0) {
+              log("📋 Received action_orders:", data);
+              const label = data.label || 'action_orders';
+              setWsModalData({
+                prompt_message: data.title || 'Action Orders',
+                button_api: kwargs.action_orders_button_api || data.button_api || '',
+                username: username,
+                prod: prod,
+                kwargs: kwargs,
+                gridRef: gridRef,
+                index: index,
+                selectedRow: { [label]: (data.action_orders || []).map((item: any) => item.updates ?? item) },
+                editableCols: { [label]: data.editable_cols?.[label] || [] },
+              });
+              return;
+            }
 
+            if (data.type === 'grid_snapshot' && Array.isArray(data.rows)) {
               const rowsToUpdate: any[] = [];
+              const rowsToAdd: any[] = [];
+              const deltaFlashInfo: Record<string, Record<string, { direction: 'positive' | 'negative' }>> = {};
+              const incomingRowIds = new Set(data.rows.map(({ row_id }: { row_id: string }) => String(row_id)));
 
-              data.forEach(({ row_id, updates }) => {
+              data.rows.forEach(({ row_id, updates }: { row_id: string; updates: Record<string, any> }) => {
                 const existingNode = gridRef.current?.api.getRowNode(row_id);
                 if (existingNode && existingNode.data) {
-                  // log(`🔍 Existing data for ${row_id}:`, existingNode.data);
-                  // log(`📨 Updates for ${row_id}:`, updates);
-
-                  // Start with existing data to preserve everything
-                  const updatedRow = { ...existingNode.data };
-
-                  // Apply only the updates from WebSocket
-                  Object.keys(updates).forEach(key => {
-                    updatedRow[key] = updates[key];
-                  });
-
-                  // Ensure index is preserved
-                  updatedRow[index] = row_id;
-
+                  deltaFlashInfo[row_id] = buildDeltaFlashInfo(row_id, existingNode.data, updates);
+                  const updatedRow = { ...existingNode.data, ...updates, [index]: row_id };
                   rowsToUpdate.push(updatedRow);
                 } else {
-                  log("⚠️  Row not found for update:", row_id);
+                  rowsToAdd.push({ ...updates, [index]: row_id });
                 }
               });
 
-              // Apply all updates in ONE transaction
-              if (rowsToUpdate.length > 0) {
-                gridRef.current?.api.applyTransaction({
-                  update: rowsToUpdate
-                });
-                log(`✅ Updated ${rowsToUpdate.length} rows`);
-
-                // ✅ Recalculate and update pinned bottom row
-                if (gridRef.current?.api) {
-                  calculateAndUpdateSubtotals(gridRef.current.api);
+              const rowsToRemove: any[] = [];
+              gridRef.current?.api.forEachNode((node: any) => {
+                if (node.data && !node.rowPinned && !incomingRowIds.has(String(node.data[index]))) {
+                  rowsToRemove.push(node.data);
                 }
+              });
+
+              if (rowsToRemove.length > 0) {
+                gridRef.current?.api.applyTransaction({ remove: rowsToRemove });
+                const removeIds = new Set(rowsToRemove.map((r: any) => String(r[index])));
+                g_rowdata = g_rowdata.filter((r: any) => !removeIds.has(String(r[index])));
+                log(`✅ Removed ${rowsToRemove.length} stale rows`);
+              }
+              if (rowsToAdd.length > 0) {
+                gridRef.current?.api.applyTransaction({ add: rowsToAdd });
+                g_rowdata.push(...rowsToAdd);
+                log(`✅ Added ${rowsToAdd.length} new rows`);
+              }
+              if (rowsToUpdate.length > 0) {
+                gridRef.current?.api.applyTransaction({ update: rowsToUpdate });
+                rowsToUpdate.forEach((updatedRow: any) => {
+                  const i = g_rowdata.findIndex((r: any) => String(r[index]) === String(updatedRow[index]));
+                  if (i >= 0) g_rowdata[i] = updatedRow;
+                });
+
+// const updatedNodes = rowsToUpdate
+//   .map((row: any) => gridRef.current?.api.getRowNode(String(row[index])))
+//   .filter((node): node is NonNullable<typeof node> => node != null);
+//   if (updatedNodes.length > 0) {
+//     gridRef.current?.api.refreshCells({ rowNodes: updatedNodes, force: true });
+//   }
+
+                applyDeltaFlashAnimations(rowsToUpdate, deltaFlashInfo);
+                log(`✅ Updated ${rowsToUpdate.length} rows`);
+              }
+
+              setFilterButtonData([...g_rowdata]);
+              if (gridRef.current?.api) calculateAndUpdateSubtotals(gridRef.current.api);
+            }
+
+
+            if (Array.isArray(data.action_buys) && data.action_buys.length > 0) {
+              log("📋 Received action_buys:", data);
+              const label = data.label || 'action_buys';
+              setWsModalData_two({
+                prompt_message: data.title || 'Action Buys',
+                button_api: kwargs.action_buys_button_api || data.button_api || '',
+                username: username,
+                prod: prod,
+                kwargs: kwargs,
+                gridRef: gridRef,
+                index: index,
+                selectedRow: { [label]: (data.action_buys || []).map((item: any) => item.updates ?? item) },
+                editableCols: { [label]: data.editable_cols_two?.[label] || [] },
+              });
+              return;
+            }
+
+
+            if (data.type === 'grid_update' && Array.isArray(data.rows) && data.rows.length > 0) {
+              const rowsToUpdate: any[] = [];
+              const rowsToAdd: any[] = [];
+              const deltaFlashInfo: Record<string, Record<string, { direction: 'positive' | 'negative' }>> = {};
+
+              data.rows.forEach(({ row_id, updates }: { row_id: string; updates: Record<string, any> }) => {
+                const existingNode = gridRef.current?.api.getRowNode(row_id);
+                if (existingNode && existingNode.data) {
+                  deltaFlashInfo[row_id] = buildDeltaFlashInfo(row_id, existingNode.data, updates);
+                  const updatedRow = { ...existingNode.data, ...updates, [index]: row_id };
+                  rowsToUpdate.push(updatedRow);
+                } else {
+                  log("➕ New row received, adding to grid:", row_id);
+                  rowsToAdd.push({ ...updates, [index]: row_id });
+                }
+              });
+
+              if (rowsToAdd.length > 0) {
+                gridRef.current?.api.applyTransaction({ add: rowsToAdd });
+                g_rowdata.push(...rowsToAdd);
+                setFilterButtonData([...g_rowdata]);
+                log(`✅ Added ${rowsToAdd.length} new rows`);
+              }
+
+              if (rowsToUpdate.length > 0) {
+                gridRef.current?.api.applyTransaction({ update: rowsToUpdate });
+                rowsToUpdate.forEach((updatedRow: any) => {
+                  const i = g_rowdata.findIndex((r: any) => String(r[index]) === String(updatedRow[index]));
+                  if (i >= 0) g_rowdata[i] = updatedRow;
+                });
+
+  //               const updatedNodes = rowsToUpdate
+  // .map((row: any) => gridRef.current?.api.getRowNode(String(row[index])))
+  // .filter((node): node is NonNullable<typeof node> => node != null);
+  // if (updatedNodes.length > 0) {
+  //   gridRef.current?.api.refreshCells({ rowNodes: updatedNodes, force: true });
+  // }
+
+                applyDeltaFlashAnimations(rowsToUpdate, deltaFlashInfo);  // ← replaces inline requestAnimationFrame block
+                log(`✅ Updated ${rowsToUpdate.length} rows at once`);
+                if (gridRef.current?.api) calculateAndUpdateSubtotals(gridRef.current.api);
               }
             }
-          } catch (error) {
+
+          }
+          catch (error) {
             console.error("❌ Error processing WebSocket message:", error);
           }
         };
@@ -405,7 +663,7 @@ const AgGrid = (props: Props) => {
           stopHeartbeat();
 
           // ✅ Auto-reconnect
-          if (!isIntentionallyClosed) {
+          if (!isIntentionallyClosed && !isTabHidden) {
             if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
               reconnectAttempts++;
               log(`🔄 Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${RECONNECT_DELAY / 1000}s...`);
@@ -415,8 +673,10 @@ const AgGrid = (props: Props) => {
                 connectWebSocket();
               }, RECONNECT_DELAY);
             } else {
-              console.error("❌ Max reconnection attempts reached. Please refresh the page.");
-              toastr.error("WebSocket connection lost. Please refresh the page.");
+              console.error("❌ Max reconnection attempts reached.");
+              if (document.visibilityState === 'visible') {
+                toastr.error("WebSocket connection lost. Please refresh the page.");
+              }
             }
           }
         };
@@ -458,6 +718,29 @@ const AgGrid = (props: Props) => {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        isTabHidden = true;
+        stopHeartbeat();
+        clearTimeout(reconnectTimeout);
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          log("🙈 Tab hidden, closing WebSocket to save resources...");
+          ws.close();
+        }
+      } else if (document.visibilityState === 'visible') {
+        isTabHidden = false;
+        const isClosed = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+        if (isClosed && !isIntentionallyClosed) {
+          log("👁️ Tab visible again, reconnecting WebSocket...");
+          reconnectAttempts = 0;
+          clearTimeout(reconnectTimeout);
+          connectWebSocket();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // Initial connection
     connectWebSocket();
 
@@ -467,11 +750,14 @@ const AgGrid = (props: Props) => {
       isIntentionallyClosed = true;
       stopHeartbeat();
       clearTimeout(reconnectTimeout);
+      document.removeEventListener('visibilitychange', handleVisibilityChange); // ← add this
+
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
     };
   }, [kwargs.api_ws, index, viewId, username, api_key]);
+
 
   const checkLastModified = async (): Promise<boolean> => {
     try {
@@ -543,14 +829,15 @@ const AgGrid = (props: Props) => {
         if (kwargs['filter_apply']) {
           filterParams = { ...filterParams, buttons: ['apply', 'reset'] };
         }
-
         grid_options.columnDefs!.push({
           ...otherKeys,
           field: col_header || index,
           headerName: col_headername,
           width: col_width,
+          initialWidth: col_width,
           pinned: pinned,
           cellRenderer: BtnCellRenderer,
+          suppressSizeToFit: true,
           // valueFormatter: otherKeys.valueFormatter ? otherKeys.valueFormatter : undefined,
           filterParams,
           cellRendererParams: {
@@ -674,6 +961,7 @@ const AgGrid = (props: Props) => {
     if (array === false) return false;
     setRowData(array);
     g_rowdata = array;
+    setFilterButtonData(array);
     return true;
   };
 
@@ -688,11 +976,17 @@ const AgGrid = (props: Props) => {
       const hasViewChanged = await checkViewIdChanged(viewId, previousViewId);
 
       // If view has changed, skip checkLastModified
-      if (!hasViewChanged && refresh_sec && refresh_sec > 0) {
+      if (!hasViewChanged) {
         const isLastModified = await checkLastModified();
         if (!isLastModified) {
           return false;
         }
+      } else {
+        // Clear modal data when switching views
+        setWsModalData({});
+        setWsModalData_two({});
+        setWsModalShow(false);
+        setWsModalShow_two(false);
       }
 
       log("fetching data...", api);
@@ -714,40 +1008,21 @@ const AgGrid = (props: Props) => {
   };
 
 
-  useEffect(() => {
-    // ✅ Only poll if WebSocket is NOT available
-    if (!api_ws && refresh_sec && refresh_sec > 0) {
-      log("📡 Starting polling (no WebSocket available)");
-      const interval = setInterval(fetchAndSetData, refresh_sec * 1000)
-      let timeout: NodeJS.Timeout
-      if (refresh_cutoff_sec > 0) {
-        timeout = setTimeout(() => {
-          clearInterval(interval)
-          log("⏹️ Polling stopped (cutoff reached)")
-        }, refresh_cutoff_sec * 1000)
-      }
-      return () => {
-        clearInterval(interval)
-        if (timeout) clearTimeout(timeout)
-      }
-    } else if (api_ws) {
-      log("🔌 WebSocket active, polling disabled");
-    }
-  }, [api_ws, refresh_sec, refresh_cutoff_sec, props, viewId])
-
-
 
 
   const autoSizeAll = useCallback((skipHeader: boolean) => {
     const allColumnIds: string[] = [];
     const columnApi = gridRef.current!.columnApi;
-    const gridColumnDefs = grid_options?.columnDefs || [];
+
     columnApi.getColumns()!.forEach((column: any) => {
-      const colDef = gridColumnDefs.find((def: any) => def.field === column.getColDef().field);
-      if (!colDef || colDef.initialWidth === undefined) {
+      const actualColDef = column.getColDef(); // Get actual column def from AG Grid
+
+      // Only autosize columns that don't have an explicit width set
+      if (!actualColDef.initialWidth && !actualColDef.suppressSizeToFit) {
         allColumnIds.push(column.getId());
       }
     });
+
     columnApi.autoSizeColumns(allColumnIds, skipHeader);
   }, []);
 
@@ -848,6 +1123,7 @@ const AgGrid = (props: Props) => {
 
         setRowData(array);
         g_rowdata = array;
+        setFilterButtonData(array);
 
         // ✅ Calculate subtotals if subtotal_cols is provided
         if (kwargs.subtotal_cols && kwargs.subtotal_cols.length > 0) {
@@ -1038,6 +1314,7 @@ const AgGrid = (props: Props) => {
     setTimeout(() => toastr.success(`Settings updated `), 300)
   }
 
+  const [filterButtonData, setFilterButtonData] = useState<any[]>([]);
   const gridContainerRef = useRef(null);
 
   type RowStyle = {
@@ -1064,17 +1341,17 @@ const AgGrid = (props: Props) => {
     }
   }
 
-  const getRowStyle = (params: RowClassParams<any>): RowStyle | undefined => {
-
+  const getRowStyle = useCallback((params: RowClassParams<any>): RowStyle | undefined => {
     try {
       const background = params.data["color_row"] ?? undefined;
       const color = params.data["color_row_text"] ?? undefined;
-      return { background, color };
+      const fontWeight = params.node?.rowPinned ? "bold" : undefined;
+      return { background, color, fontWeight };
     } catch (error) {
       console.error("Error accessing row style:", error);
-      return undefined; // Return undefined when an error occurs
+      return undefined;
     }
-  };
+  }, []);
 
 
   const getButtonStyle = (length: number) => {
@@ -1100,33 +1377,48 @@ const AgGrid = (props: Props) => {
       v => v !== undefined && v !== null
     );
   };
-  // let filter_button = "piece_name";
 
-  const uniqueValues = useMemo(
-    () => getUniqueColumnValues(filter_button, rowData),
-    [rowData, filter_button]
-  );
 
-  const handleButtonFilter = (value: string | null) => {
-    setActiveFilter(value);
+  const filterButtonsIsDict = filter_button && !Array.isArray(filter_button) && typeof filter_button === "object";
+  const filterButtonsDict: Record<string, string[]> = filterButtonsIsDict ? filter_button as Record<string, string[]> : {};
+  const filterButtons: string[] = Array.isArray(filter_button) ? filter_button : [];
 
-    if (gridRef.current && gridRef.current.api) {
-      const api = gridRef.current.api;
-      if (value) {
-        api.setFilterModel({
-          ...api.getFilterModel(),
-          [filter_button]: { filterType: "set", values: [value] }
-        });
-      } else {
-        const model = api.getFilterModel();
-        delete model[filter_button];
-        api.setFilterModel(model);
-      }
+  const handleButtonFilter = (column: string, value: string | null) => {
+    const api = gridRef.current?.api;
+    if (value === null) {
+      // Clear this column
+      setActiveFilter(prev => { const n = { ...prev }; delete n[column]; return n; });
+      if (api) { const m = api.getFilterModel(); delete m[column]; api.setFilterModel(m); }
+      return;
+    }
+    // Toggle value in/out of multi-select array
+    const existing = activeFilter[column] || [];
+    const newVals = existing.includes(value)
+      ? existing.filter(v => v !== value)
+      : [...existing, value];
+
+    if (newVals.length === 0) {
+      setActiveFilter(prev => { const n = { ...prev }; delete n[column]; return n; });
+      if (api) { const m = api.getFilterModel(); delete m[column]; api.setFilterModel(m); }
+    } else {
+      setActiveFilter(prev => ({ ...prev, [column]: newVals }));
+      if (api) { api.setFilterModel({ ...api.getFilterModel(), [column]: { filterType: "set", values: newVals } }); }
     }
   };
 
+  const onFilterChanged = useCallback(() => {
+    if (gridRef.current?.api && kwargs.subtotal_cols?.length > 0) {
+      calculateAndUpdateSubtotals(gridRef.current.api);
+    }
+  }, [calculateAndUpdateSubtotals, kwargs.subtotal_cols]);
 
 
+  const memoizedGridOptions = useMemo(
+    () => getGridOptions(),
+    // Only recompute when Streamlit pushes new grid config — NOT on WS state updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.grid_options, kwargs.nestedGridEnabled, kwargs.detailGridOptions]
+  );
 
 
 
@@ -1178,8 +1470,8 @@ const AgGrid = (props: Props) => {
             style={{
               fontWeight: "bold",
               color: "#055A6E",
-              marginBottom: "4px",
-              fontSize: "15px",
+              marginBottom: "3px",
+              fontSize: "14px",
             }}
           >
             {kwargs.toggle_header ? kwargs.toggle_header : ""}
@@ -1319,13 +1611,178 @@ const AgGrid = (props: Props) => {
       )}
 
 
+
+
+
+      {kwargs.api_ozz && (
+        <div style={{
+          position: "absolute",
+          top: "8px",
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          width: "100%",
+        }}>
+          <Ozz
+            username={username}
+            kwargs={kwargs}
+            api={api}
+            prod={prod}
+            onSendMessage={async (msg, history) => {
+              if (!kwargs.api_ozz) {
+                return `🧪 Test Mode: You said "${msg}". Configure kwargs.api_ozz to connect to your backend.`;
+              }
+
+              try {
+                const res = await axios.post(kwargs.api_ozz, {
+                  message: msg,
+                  conversation_history: history,
+                  client_user: username,
+                  prod: kwargs.prod,
+                  api_key: kwargs.api_key,
+                });
+                return res.data.content;
+              } catch (error: any) {
+                console.error("Ozz API error:", error);
+                return `⚠️ API Error: ${error.message || "Could not reach Pollen API"}. Test response for: "${msg}"`;
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {
+        kwargs.empty_spaceing || true && (
+          <div style={{ height: Number(kwargs.empty_spaceing || 50), width: "100%" }} />
+        )
+        /* Add empty space below the grid if specified in kwargs */
+      }
+
+
+      {/* ── Edit Chessboard Ticker Search Button ───────────────────────────────────────── */}
+      {kwargs.show_ticker_search_btn && (
+        <div style={{ marginBottom: "5px", display: "flex", justifyContent: "flex-start" }}>
+          <button
+            onClick={() => setTickerSearchModalShow(true)}
+            style={{
+              background: "linear-gradient(135deg, #1b4a1aff 0%, #0f3314ff 100%)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "7px 16px",
+              fontWeight: 700,
+              fontSize: "0.88rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            title="Search & add a ticker to your chessboard"
+          >
+            Search Edit Portfolio Board
+          </button>
+        </div>
+      )}
+
+      {/* ── WS Modal Data Button ───────────────────────────────────────── */}
+      {wsModalData && Object.keys(wsModalData).length > 0 && (
+        <div style={{ marginBottom: "5px", display: "flex", justifyContent: "flex-start" }}>
+          <button
+            onClick={() => setWsModalShow((prev) => !prev)}
+            style={{
+              background: wsModalShow
+                ? "linear-gradient(135deg, #1a3d1c 0%, #2c5f2e 100%)"
+                : "linear-gradient(135deg, #2c5f2e 0%, #3a7d44 100%)",
+              color: "#fff",
+              border: "2px solid #2c5f2e",
+              borderRadius: "8px",
+              padding: "7px 16px",
+              fontWeight: 700,
+              fontSize: "0.88rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+          >
+            {wsModalShow ? "▼" : "▶"}{" "}
+            {wsModalData.prompt_message || "View Data"}
+            {(() => {
+              const key = Object.keys(wsModalData.selectedRow || {})[0];
+              const rows = wsModalData.selectedRow?.[key];
+              return Array.isArray(rows) ? ` (${rows.length})` : "";
+            })()}
+          </button>
+        </div>
+      )}
+
+      {/* ── WS Modal Data Button ───────────────────────────────────────── */}
+      {wsModalData_two && Object.keys(wsModalData_two).length > 0 && (
+        <div style={{ marginBottom: "5px", display: "flex", justifyContent: "flex-start" }}>
+          <button
+            onClick={() => setWsModalShow_two((prev) => !prev)}
+            style={{
+              background: wsModalShow_two
+                ? "linear-gradient(135deg, #1a3d1c 0%, #2c5f2e 100%)"
+                : "linear-gradient(135deg, #2c5f2e 0%, #3a7d44 100%)",
+              color: "#fff",
+              border: "2px solid #2c5f2e",
+              borderRadius: "8px",
+              padding: "7px 16px",
+              fontWeight: 700,
+              fontSize: "0.88rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+          >
+            {wsModalShow_two ? "▼" : "▶"}{" "}
+            {wsModalData_two.prompt_message || "View Data"}
+            {(() => {
+              const key = Object.keys(wsModalData_two.selectedRow || {})[0];
+              const rows = wsModalData_two.selectedRow?.[key];
+              return Array.isArray(rows) ? ` (${rows.length})` : "";
+            })()}
+          </button>
+        </div>
+      )}
+
+      <TickerSearchModal
+        isOpen={tickerSearchModalShow}
+        closeModal={() => setTickerSearchModalShow(false)}
+        username={username}
+        prod={prod}
+        kwargs={kwargs}
+        api={api}
+        toastr={toastr}
+        chessboard={kwargs.chessboard}  // ✅ Add this line
+        ticker_buying_powers={kwargs.ticker_buying_powers}  // ✅ Add this line
+        cash_position={kwargs.cash_position}
+        accountInfo={kwargs.accountInfo}
+
+      />
+
+
       <MyModal
         isOpen={modalShow}
         closeModal={() => setModalshow(false)}
         modalData={{
           ...modalData,
-          index: index,        // ✅ Pass index
-          gridRef: gridRef     // ✅ Pass grid reference
+          index: index,
+          gridRef: gridRef
         }}
         promptText={promptText}
         setPromptText={setPromptText}
@@ -1337,9 +1794,26 @@ const AgGrid = (props: Props) => {
         id="myGrid"
       >
 
+        <MyModal
+          isOpen={wsModalShow}
+          closeModal={() => setWsModalShow(false)}
+          modalData={wsModalData ? { ...wsModalData, index, gridRef } : { selectedRow: {}, editableCols: {}, prompt_message: '' }}
+          promptText={{}}
+          setPromptText={() => { }}
+          toastr={toastr}
+        />
+
+        <MyModal
+          isOpen={wsModalShow_two}
+          closeModal={() => setWsModalShow_two(false)}
+          modalData={wsModalData_two ? { ...wsModalData_two, index, gridRef } : { selectedRow: {}, editableCols: {}, prompt_message: '' }}
+          promptText={{}}
+          setPromptText={() => { }}
+          toastr={toastr}
+        />
 
         <div className="d-flex justify-content-between align-items-center">
-          {!kwargs['api_ws'] && (refresh_sec == undefined || refresh_sec == 0) && (
+          {!kwargs['api_ws'] && (
             <div style={{ display: "flex" }}>
               <div style={{ margin: "5px 5px 5px 2px" }}>
                 <button
@@ -1420,111 +1894,379 @@ const AgGrid = (props: Props) => {
           }}
         >
 
+          {/* Column Sets — own wrapper */}
           {kwargs.column_sets && (
-
-            <div style={{ marginBottom: 12, display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-
-              <button
-                onClick={() => {
-                  setSelectedColumnSetKey(null);
-                  setTimeout(() => {
-                    const columnApi = gridRef.current?.columnApi;
-                    if (columnApi && initialColumnState) {
-                      columnApi.applyColumnState({
-                        state: initialColumnState,
-                        applyOrder: true,
-                      });
-                    }
-                  }, 0);
-                }}
-                style={{
-                  background: "rgba(225, 246, 221, 1)",
-                  color: "black",
-                  border: "1.5px solid rgb(213, 213, 213)",
-                  borderRadius: "6px",
-                  fontWeight: "bold",
-                  fontSize: "12px",
-                  padding: "5px 10px",
-                  margin: "0 4px 4px 0",
-                  boxShadow: "0 2px 6px rgb(216, 216, 216)",
-                  transition: "all 0.15s",
-                  cursor: "pointer",
-                }}
-              >
-                Reset View
-              </button>
-
-
-              {Object.keys(kwargs.column_sets).map(key => (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              marginBottom: 4,
+              // border: "1.5px solid #e5eff6ff",
+              // borderRadius: "8px",
+              background: "transparent", //"#f3f4f5ff",
+              overflow: "hidden",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "nowrap", overflowX: "auto", padding: "4px 6px", gap: "0" }}>
                 <button
-                  key={key}
                   onClick={() => {
-                    const newKey = selectedColumnSetKey === key ? null : key;
-                    setSelectedColumnSetKey(newKey);
-
+                    setSelectedColumnSetKey(null);
                     setTimeout(() => {
                       const columnApi = gridRef.current?.columnApi;
-
-                      if (!newKey) {
-                        if (columnApi && initialColumnState) {
-                          columnApi.applyColumnState({
-                            state: initialColumnState,
-                            applyOrder: true,
-                          });
-                        }
-                      } else {
-                        const columnsToShow = kwargs.column_sets[newKey];
-
-                        if (columnApi && Array.isArray(grid_options.columnDefs)) {
-                          grid_options.columnDefs.forEach((col: any) => {
-                            columnApi.setColumnVisible(col.field, false);
-                          });
-
-                          columnsToShow.forEach((field: string, idx: number) => {
-                            columnApi.setColumnVisible(field, true);
-                            columnApi.moveColumn(field, idx);
-                          });
-                        }
+                      if (columnApi && initialColumnState) {
+                        columnApi.applyColumnState({ state: initialColumnState, applyOrder: true });
                       }
                     }, 0);
                   }}
                   style={{
-                    background: selectedColumnSetKey === key
-                      ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)"
-                      : "#ffffff",
-                    color: selectedColumnSetKey === key ? "white" : "#4a5568",
-                    border: selectedColumnSetKey === key ? "none" : "2px solid #e2e8f0",
-                    borderRadius: "20px",
-                    fontWeight: selectedColumnSetKey === key ? "700" : "600",
-                    fontSize: "13px",
-                    padding: "8px 16px",
-                    margin: "0 6px 6px 0",
-                    boxShadow: selectedColumnSetKey === key
-                      ? "0 4px 15px rgba(102, 126, 234, 0.4)"
-                      : "0 2px 4px rgba(0,0,0,0.08)",
-                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                    cursor: "pointer",
-                    transform: selectedColumnSetKey === key ? "translateY(-1px)" : "translateY(0)",
+                    background: "rgba(225, 246, 221, 1)", color: "black",
+                    border: "1.5px solid rgb(180, 210, 180)", borderRadius: "5px",
+                    fontWeight: "bold", fontSize: "12px", padding: "3px 8px",
+                    flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", transition: "all 0.15s",
                   }}
-                  onMouseEnter={(e) => {
-                    if (selectedColumnSetKey !== key) {
-                      e.currentTarget.style.boxShadow = "0 4px 8px rgba(0,0,0,0.12)";
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedColumnSetKey !== key) {
-                      e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.08)";
-                      e.currentTarget.style.transform = "translateY(0)";
-                    }
-                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 3px 10px rgba(100,180,100,0.3)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
                 >
-                  {key}
+                  Reset View
                 </button>
-              ))}
 
+                <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8dcccff", margin: "0 6px", flexShrink: 0 }} />
+                {Object.keys(kwargs.column_sets).map(key => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      const newKey = selectedColumnSetKey === key ? null : key;
+                      setSelectedColumnSetKey(newKey);
+                      setTimeout(() => {
+                        const columnApi = gridRef.current?.columnApi;
+                        if (!newKey) {
+                          if (columnApi && initialColumnState) columnApi.applyColumnState({ state: initialColumnState, applyOrder: true });
+                        } else {
+                          const columnsToShow = kwargs.column_sets[newKey];
+                          if (columnApi && Array.isArray(grid_options.columnDefs)) {
+                            grid_options.columnDefs.forEach((col: any) => columnApi.setColumnVisible(col.field, false));
+                            columnsToShow.forEach((field: string, idx: number) => { columnApi.setColumnVisible(field, true); columnApi.moveColumn(field, idx); });
+                          }
+                        }
+                      }, 0);
+                    }}
+                    style={{
+                      background: selectedColumnSetKey === key ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)" : "#ffffff",
+                      color: selectedColumnSetKey === key ? "white" : "#4a5568",
+                      border: selectedColumnSetKey === key ? "1.5px solid #3a9050" : "1.5px solid #8dc789ff",
+                      borderRadius: "12px", fontWeight: selectedColumnSetKey === key ? "700" : "500",
+                      fontSize: "12px", padding: "3px 9px", marginRight: "4px", flexShrink: 0, whiteSpace: "nowrap",
+                      boxShadow: selectedColumnSetKey === key ? "0 2px 8px rgba(75,162,98,0.35)" : "none",
+                      transition: "all 0.15s ease", cursor: "pointer",
+                      transform: selectedColumnSetKey === key ? "translateY(-1px)" : "translateY(0)",
+                    }}
+                    onMouseEnter={(e) => { if (selectedColumnSetKey !== key) { e.currentTarget.style.borderColor = "#8aa4b8"; e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                    onMouseLeave={(e) => { if (selectedColumnSetKey !== key) { e.currentTarget.style.borderColor = "#c8d0d8"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Clear All Filters */}
+          {(kwargs.show_clear_all_filters) && (
+            <div style={{ marginBottom: 4, display: "flex", justifyContent: "flex-start" }}>
+              <button
+                onClick={() => {
+                  setActiveFilter({});
+                  if (gridRef.current?.api) gridRef.current.api.setFilterModel({});
+                }}
+                style={{
+                  background: "rgba(183,136,129,1)", color: "white",
+                  border: "1.5px solid rgba(150,80,70,1)", borderRadius: "5px",
+                  fontWeight: "bold", fontSize: "11px", padding: "3px 12px",
+                  cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 3px 10px rgba(239,83,80,0.4)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
+              >
+                Clear All Filters
+              </button>
+            </div>
+          )}
+
+
+          {/* Filter Sections Toggle */}
+          {(kwargs.filter_main_key || (filterButtonsIsDict ? Object.keys(filterButtonsDict).length > 0 : filterButtons.length > 0)) && (
+            <button
+              onClick={() => setFiltersExpanded(p => !p)}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px",
+                background: "transparent", border: "none",
+                color: "#055A6E", fontWeight: "700", fontSize: "11px",
+                cursor: "pointer", padding: "2px 0px", marginBottom: "2px",
+                textTransform: "uppercase", letterSpacing: "0.5px",
+              }}
+            >
+              <span>{filtersExpanded ? "▾" : "▸"}</span>
+              Filters
+            </button>
+          )}
+          {filtersExpanded && (
+            <>
+
+
+              {/* Hub-and-Spoke Filter Mode */}
+              {kwargs.filter_main_key && rowData.length > 0 && (() => {
+                const mainKeys: string[] = Array.isArray(kwargs.filter_main_key)
+                  ? kwargs.filter_main_key
+                  : [kwargs.filter_main_key];
+
+                return mainKeys.map((mainKey: string) => (
+                  <div key={mainKey} style={{ marginBottom: 6 }}>
+                    {/* Column name divider — only shown when multiple keys and no child key */}
+                    {mainKeys.length > 1 && !kwargs.filter_child_key && (
+                      <div style={{
+                        fontSize: "9px", color: "#0e2b10", fontWeight: "700",
+                        textTransform: "uppercase", letterSpacing: "1px",
+                        borderBottom: "1.5px solid #f9fafa", paddingBottom: "2px", marginBottom: "4px",
+                      }}>
+                        {mainKey}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "flex-start" }}>
+                      {(Array.from(new Set(rowData.map((r: any) => r[mainKey]))).filter(Boolean) as any[]).map((mainVal: any) => {
+                        const buttonStyles: Record<string, any> = kwargs.filter_button_styles || {};
+                        const mainCustomStyle = buttonStyles[String(mainVal)] || {};
+                        const isMainActive = (activeFilter[mainKey] || []).includes(mainVal);
+
+                        const mainButton = (
+                          <>
+                            {kwargs.main_key_string && kwargs.main_key_string[String(mainVal)] && (
+                              <span style={{ fontSize: "10px", color: "#29442f", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                                {kwargs.main_key_string[String(mainVal)]}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleButtonFilter(mainKey, mainVal)}
+                              style={{
+                                ...(isMainActive
+                                  ? { background: "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)", color: "white", border: "1.5px solid #3a9050", boxShadow: "0 2px 8px rgba(75,162,98,0.35)" }
+                                  : { background: mainCustomStyle.background || "transparent", color: mainCustomStyle.color || "#055A6E", border: "1.5px solid " + (mainCustomStyle.borderColor || "#8dc0d4"), boxShadow: "none" }
+                                ),
+                                borderRadius: mainCustomStyle.borderRadius || "7px",
+                                fontWeight: mainCustomStyle.fontWeight || "700",
+                                fontSize: mainCustomStyle.fontSize || "13px",
+                                padding: mainCustomStyle.padding || "4px 12px",
+                                cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s ease",
+                                transform: isMainActive ? "translateY(-1px)" : "translateY(0)",
+                              }}
+                              onMouseEnter={(e) => { if (!isMainActive) { e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.12)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                              onMouseLeave={(e) => { if (!isMainActive) { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                            >
+                              {mainVal}
+                            </button>
+                          </>
+                        );
+
+                        if (!kwargs.filter_child_key) {
+                          return (
+                            <div key={String(mainVal)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                              {mainButton}
+                            </div>
+                          );
+                        }
+
+                        const childRows = rowData.filter((r: any) => r[mainKey] === mainVal);
+                        const childVals: any[] = Array.from(new Set(childRows.map((r: any) => r[kwargs.filter_child_key]))).filter(Boolean);
+
+                        return (
+                          <div key={String(mainVal)} style={{
+                            border: ".5px solid #154d1d", borderRadius: "10px", background: kwargs.filterButton_background || "transparent",
+                            padding: "3px 7px 3px 7px", display: "flex", flexDirection: "column",
+                            alignItems: "center", gap: "3px", minWidth: "70px",
+                          }}>
+                            {mainButton}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", justifyContent: "center" }}>
+                              {childVals.map((childVal: any) => {
+                                const childStyleKey = `${mainVal}__${childVal}`;
+                                const childCustomStyle = buttonStyles[childStyleKey] || {};
+                                const isChildActive = (activeFilter[kwargs.filter_child_key] || []).includes(childVal);
+                                return (
+                                  <button
+                                    key={String(childVal)}
+                                    onClick={() => handleButtonFilter(kwargs.filter_child_key, childVal)}
+                                    style={{
+                                      ...(isChildActive
+                                        ? { background: "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)", color: "white", border: "1.5px solid #3a9050", boxShadow: "0 2px 8px rgba(75,162,98,0.35)" }
+                                        : { background: childCustomStyle.background || "#ffffff", color: childCustomStyle.color || "#4a5568", border: "1.5px solid " + (childCustomStyle.borderColor || "#c8d0d8"), boxShadow: "none" }
+                                      ),
+                                      borderRadius: childCustomStyle.borderRadius || "10px",
+                                      fontWeight: isChildActive ? "700" : (childCustomStyle.fontWeight || "500"),
+                                      fontSize: childCustomStyle.fontSize || "10px",
+                                      padding: childCustomStyle.padding || "2px 7px",
+                                      cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s ease",
+                                      transform: isChildActive ? "translateY(-1px)" : "translateY(0)",
+                                    }}
+                                    onMouseEnter={(e) => { if (!isChildActive) { e.currentTarget.style.borderColor = "#f1faf0"; e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                                    onMouseLeave={(e) => { if (!isChildActive) { e.currentTarget.style.borderColor = childCustomStyle.borderColor || "#e4f1e3"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                                  >
+                                    {childVal}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
+
+              {/* Filter Buttons — own wrapper (dict and array modes) */}
+              {(filterButtonsIsDict ? Object.keys(filterButtonsDict).length > 0 : filterButtons.length > 0) && (
+                filterButtonsIsDict ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: 6 }}>
+                    {Object.entries(filterButtonsDict).map(([groupName, cols]) => (
+                      <div key={groupName} style={{
+                        border: "1.5px solid #b0c8d4", borderRadius: "8px", background: "#f5f8f6ff",
+                        overflow: "visible", padding: "4px 8px 6px 8px",
+                      }}>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: "#055A6E", marginBottom: "4px", letterSpacing: "0.3px" }}>
+                          {groupName}
+                        </div>
+                        {cols.map((col, rowIdx) => (
+                          <div key={col} style={{
+                            display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "4px",
+                            padding: "3px 0", borderTop: rowIdx > 0 ? "1px solid #d0dde4" : "none",
+                          }}>
+                            <span style={{ fontSize: "9px", color: "#8a9bb0", fontWeight: "600", flexShrink: 0, marginRight: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{col}</span>
+                            <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px 0 0", flexShrink: 0 }} />
+                            {kwargs['show_clear_all_filters'] && (
+                              <>
+                                <button onClick={() => handleButtonFilter(col, null)}
+                                  style={{ background: "rgba(183,136,129,1)", color: "white", border: "1.5px solid rgba(150,80,70,1)", borderRadius: "5px", fontWeight: "bold", fontSize: "10px", padding: "3px 8px", flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", transition: "all 0.15s" }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 3px 10px rgba(239,83,80,0.4)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
+                                >Clear</button>
+                                <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px", flexShrink: 0 }} />
+                              </>
+                            )}
+                            {getUniqueColumnValues(col, filterButtonData).map((val: any) => (
+                              <button key={val} onClick={() => handleButtonFilter(col, val)}
+                                style={{ background: (activeFilter[col] || []).includes(val) ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)" : "#ffffff", color: (activeFilter[col] || []).includes(val) ? "white" : "#4a5568", border: (activeFilter[col] || []).includes(val) ? "1.5px solid #3a9050" : "1.5px solid #c8d0d8", borderRadius: "12px", fontWeight: (activeFilter[col] || []).includes(val) ? "700" : "500", fontSize: "11px", padding: "3px 9px", marginRight: "4px", whiteSpace: "nowrap", boxShadow: (activeFilter[col] || []).includes(val) ? "0 2px 8px rgba(75,162,98,0.35)" : "none", transition: "all 0.15s ease", cursor: "pointer", transform: (activeFilter[col] || []).includes(val) ? "translateY(-1px)" : "translateY(0)" }}
+                                onMouseEnter={(e) => { if (!(activeFilter[col] || []).includes(val)) { e.currentTarget.style.borderColor = "#8aa4b8"; e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                                onMouseLeave={(e) => { if (!(activeFilter[col] || []).includes(val)) { e.currentTarget.style.borderColor = "#c8d0d8"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                              >{val}</button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", marginBottom: 6, border: "1.5px solid #e5eff6ff", borderRadius: "8px", background: "#f5f8f6ff", overflow: "visible" }}>
+                    {filterButtons.map((col, rowIdx) => (
+                      <div key={col} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "4px", padding: "4px 6px", borderTop: rowIdx > 0 ? "1.5px solid #c8d4dc" : "none" }}>
+                        <span style={{ fontSize: "9px", color: "#8a9bb0", fontWeight: "600", flexShrink: 0, marginRight: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{col}</span>
+                        <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px 0 0", flexShrink: 0 }} />
+                        {kwargs['show_clear_all_filters'] && (
+                          <>
+                            <button onClick={() => handleButtonFilter(col, null)}
+                              style={{ background: "rgba(183,136,129,1)", color: "white", border: "1.5px solid rgba(150,80,70,1)", borderRadius: "5px", fontWeight: "bold", fontSize: "10px", padding: "3px 8px", flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", transition: "all 0.15s" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 3px 10px rgba(239,83,80,0.4)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
+                            >Clear</button>
+                            <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px", flexShrink: 0 }} />
+                          </>
+                        )}
+                        {getUniqueColumnValues(col, filterButtonData).map(val => (
+                          <button key={val} onClick={() => handleButtonFilter(col, val)}
+                            style={{ background: (activeFilter[col] || []).includes(val) ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)" : "#ffffff", color: (activeFilter[col] || []).includes(val) ? "white" : "#4a5568", border: (activeFilter[col] || []).includes(val) ? "1.5px solid #3a9050" : "1.5px solid #c8d0d8", borderRadius: "12px", fontWeight: (activeFilter[col] || []).includes(val) ? "700" : "500", fontSize: "11px", padding: "3px 9px", marginRight: "4px", whiteSpace: "nowrap", boxShadow: (activeFilter[col] || []).includes(val) ? "0 2px 8px rgba(75,162,98,0.35)" : "none", transition: "all 0.15s ease", cursor: "pointer", transform: (activeFilter[col] || []).includes(val) ? "translateY(-1px)" : "translateY(0)" }}
+                            onMouseEnter={(e) => { if (!(activeFilter[col] || []).includes(val)) { e.currentTarget.style.borderColor = "#8aa4b8"; e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                            onMouseLeave={(e) => { if (!(activeFilter[col] || []).includes(val)) { e.currentTarget.style.borderColor = "#c8d0d8"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                          >{val}</button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {/* Filter Buttons — own wrapper (dict and array modes) */}
+              {(filterButtonsIsDict ? Object.keys(filterButtonsDict).length > 0 : filterButtons.length > 0) && (
+                filterButtonsIsDict ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: 6 }}>
+                    {Object.entries(filterButtonsDict).map(([groupName, cols]) => (
+                      <div key={groupName} style={{
+                        border: "1.5px solid #b0c8d4", borderRadius: "8px", background: "#f5f8f6ff",
+                        overflow: "visible", padding: "4px 8px 6px 8px",
+                      }}>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: "#055A6E", marginBottom: "4px", letterSpacing: "0.3px" }}>
+                          {groupName}
+                        </div>
+                        {cols.map((col, rowIdx) => (
+                          <div key={col} style={{
+                            display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "4px",
+                            padding: "3px 0", borderTop: rowIdx > 0 ? "1px solid #d0dde4" : "none",
+                          }}>
+                            <span style={{ fontSize: "9px", color: "#8a9bb0", fontWeight: "600", flexShrink: 0, marginRight: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                              {col}
+                            </span>
+                            <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px 0 0", flexShrink: 0 }} />
+                            {kwargs['show_clear_all_filters'] && (
+                              <>
+                                <button
+                                  onClick={() => { handleButtonFilter(col, null); if (gridRef.current?.api) { const m = gridRef.current.api.getFilterModel(); delete m[col]; gridRef.current.api.setFilterModel(m); } }}
+                                  style={{ background: "rgba(183,136,129,1)", color: "white", border: "1.5px solid rgba(150,80,70,1)", borderRadius: "5px", fontWeight: "bold", fontSize: "10px", padding: "3px 8px", flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", transition: "all 0.15s" }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 3px 10px rgba(239,83,80,0.4)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
+                                >Clear</button>
+                                <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px", flexShrink: 0 }} />
+                              </>
+                            )}
+                            {getUniqueColumnValues(col, filterButtonData).map((val: any) => (
+                              <button key={val} onClick={() => handleButtonFilter(col, val)}
+                                style={{ background: activeFilter[col] === val ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)" : "#ffffff", color: activeFilter[col] === val ? "white" : "#4a5568", border: activeFilter[col] === val ? "1.5px solid #3a9050" : "1.5px solid #c8d0d8", borderRadius: "12px", fontWeight: activeFilter[col] === val ? "700" : "500", fontSize: "11px", padding: "3px 9px", marginRight: "4px", whiteSpace: "nowrap", boxShadow: activeFilter[col] === val ? "0 2px 8px rgba(75,162,98,0.35)" : "none", transition: "all 0.15s ease", cursor: "pointer", transform: activeFilter[col] === val ? "translateY(-1px)" : "translateY(0)" }}
+                                onMouseEnter={(e) => { if (activeFilter[col] !== val) { e.currentTarget.style.borderColor = "#8aa4b8"; e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                                onMouseLeave={(e) => { if (activeFilter[col] !== val) { e.currentTarget.style.borderColor = "#c8d0d8"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                              >{val}</button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", marginBottom: 6, border: "1.5px solid #e5eff6ff", borderRadius: "8px", background: "#f5f8f6ff", overflow: "visible" }}>
+                    {filterButtons.map((col, rowIdx) => (
+                      <div key={col} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: "4px", padding: "4px 6px", borderTop: rowIdx > 0 ? "1.5px solid #c8d4dc" : "none" }}>
+                        <span style={{ fontSize: "9px", color: "#8a9bb0", fontWeight: "600", flexShrink: 0, marginRight: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{col}</span>
+                        <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px 0 0", flexShrink: 0 }} />
+                        {kwargs['show_clear_all_filters'] && (
+                          <>
+                            <button
+                              onClick={() => { handleButtonFilter(col, null); if (gridRef.current?.api) { const m = gridRef.current.api.getFilterModel(); delete m[col]; gridRef.current.api.setFilterModel(m); } }}
+                              style={{ background: "rgba(183,136,129,1)", color: "white", border: "1.5px solid rgba(150,80,70,1)", borderRadius: "5px", fontWeight: "bold", fontSize: "10px", padding: "3px 8px", flexShrink: 0, whiteSpace: "nowrap", cursor: "pointer", transition: "all 0.15s" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 3px 10px rgba(239,83,80,0.4)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; }}
+                            >Clear</button>
+                            <div style={{ width: "1.5px", alignSelf: "stretch", background: "#c8d4dc", margin: "0 6px", flexShrink: 0 }} />
+                          </>
+                        )}
+                        {getUniqueColumnValues(col, filterButtonData).map(val => (
+                          <button key={val} onClick={() => handleButtonFilter(col, val)}
+                            style={{ background: activeFilter[col] === val ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)" : "#ffffff", color: activeFilter[col] === val ? "white" : "#4a5568", border: activeFilter[col] === val ? "1.5px solid #3a9050" : "1.5px solid #c8d0d8", borderRadius: "12px", fontWeight: activeFilter[col] === val ? "700" : "500", fontSize: "11px", padding: "3px 9px", marginRight: "4px", whiteSpace: "nowrap", boxShadow: activeFilter[col] === val ? "0 2px 8px rgba(75,162,98,0.35)" : "none", transition: "all 0.15s ease", cursor: "pointer", transform: activeFilter[col] === val ? "translateY(-1px)" : "translateY(0)" }}
+                            onMouseEnter={(e) => { if (activeFilter[col] !== val) { e.currentTarget.style.borderColor = "#8aa4b8"; e.currentTarget.style.boxShadow = "0 2px 6px rgba(0,0,0,0.1)"; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                            onMouseLeave={(e) => { if (activeFilter[col] !== val) { e.currentTarget.style.borderColor = "#c8d0d8"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "translateY(0)"; } }}
+                          >{val}</button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+
+            </>
+          )}
+
+
           {/* Streamer for streaming_list_text if present */}
           {kwargs.streaming_list_text && Array.isArray(kwargs.streaming_list_text) && (
             <div
@@ -1576,106 +2318,26 @@ const AgGrid = (props: Props) => {
             </div>
           )}
 
-          {kwargs['filter_button'] && kwargs['filter_button'] !== '' && (
-            <div style={{ marginBottom: 8 }}>
-
-
-              {kwargs['show_clear_all_filters'] && (
-                <button
-                  onClick={() => {
-                    if (gridRef.current && gridRef.current.api) {
-                      gridRef.current.api.setFilterModel({});
-                    }
-                    setActiveFilter(null);
-                  }}
-                  style={{
-                    background: "rgba(183, 136, 129, 1)",
-                    color: "white",
-                    border: "1.5px solid rgba(239, 255, 235, 1)",
-                    borderRadius: "6px",
-                    fontWeight: "bold",
-                    fontSize: "11px",
-                    padding: "5px 10px",
-                    margin: "0 4px 4px 0",
-                    boxShadow: "0 2px 6px rgba(241, 255, 240, 1)",
-                    transition: "all 0.15s",
-                    cursor: "pointer",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = "0 6px 20px rgba(239, 83, 80, 0.5)";
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = "0 4px 15px rgba(239, 83, 80, 0.4)";
-                    e.currentTarget.style.transform = "translateY(0)";
-                  }}
-                >
-                  Clear Filters
-                </button>
-              )}
-
-
-              {uniqueValues.map(val => (
-                <button
-                  key={val}
-                  onClick={() => handleButtonFilter(val)}
-                  style={{
-                    background: activeFilter === val
-                      ? "linear-gradient(135deg, #7cea66ff 0%, #4ba262ff 100%)"
-                      : "#ffffff",
-                    color: activeFilter === val ? "white" : "#4a5568",
-                    border: activeFilter === val ? "none" : "2px solid #e2e8f0",
-                    borderRadius: "15px",
-                    fontWeight: activeFilter === val ? "700" : "600",
-                    fontSize: "12px",
-                    padding: "5px 10px",
-                    margin: "0 6px 6px 0",
-                    boxShadow: activeFilter === val
-                      ? "0 4px 15px rgba(102, 126, 234, 0.4)"
-                      : "0 2px 4px rgba(0,0,0,0.08)",
-                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                    cursor: "pointer",
-                    transform: activeFilter === val ? "translateY(-1px)" : "translateY(0)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (activeFilter !== val) {
-                      e.currentTarget.style.boxShadow = "0 4px 8px rgba(0,0,0,0.12)";
-                      e.currentTarget.style.transform = "translateY(-2px)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (activeFilter !== val) {
-                      e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.08)";
-                      e.currentTarget.style.transform = "translateY(0)";
-                    }
-                  }}
-                >
-                  {val}
-                </button>
-              ))}
-
-            </div>
-          )}
-
 
           <AgGridReact
             ref={gridRef}
             rowData={rowData}
             getRowStyle={getRowStyle}
-            headerHeight={30}
-            rowHeight={30}
+            headerHeight={kwargs?.headerHeight || 30}
+            rowHeight={kwargs?.rowHeight || 30}
             onGridReady={onGridReady}
-            onFilterChanged={() => {
-              // ✅ Recalculate subtotals when filters change
-              if (gridRef.current?.api && kwargs.subtotal_cols?.length > 0) {
-                calculateAndUpdateSubtotals(gridRef.current.api);
-              }
-            }}
+            // onFilterChanged={() => {
+            //   // ✅ Recalculate subtotals when filters change
+            //   if (gridRef.current?.api && kwargs.subtotal_cols?.length > 0) {
+            //     calculateAndUpdateSubtotals(gridRef.current.api);
+            //   }
+            // }}
+            onFilterChanged={onFilterChanged}
             autoGroupColumnDef={autoGroupColumnDef}
             animateRows={true}
             suppressAggFuncInHeader={true}
             getRowId={getRowId}
-            gridOptions={getGridOptions()}
+            gridOptions={memoizedGridOptions}
             onCellValueChanged={onCellValueChanged}
             columnTypes={columnTypes}
             sideBar={grid_options.sideBar === false ? false : sideBar}

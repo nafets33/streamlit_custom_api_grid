@@ -192,7 +192,7 @@ const MyModal: React.FC<MyModalProps> = ({
       return;
     }
 
-    // ✅ selectedRow is already fresh — was fetched from grid in Aggrid.tsx before setModalData
+    // selectedRow is already fresh — was fetched from grid in Aggrid.tsx before setModalData
     const orders = selectedRow?.[activeDisplayColumn];
 
     if (!Array.isArray(orders) || editableCols.length === 0) {
@@ -235,9 +235,6 @@ const MyModal: React.FC<MyModalProps> = ({
   const datetimeFields = [];
   const arrayFields = [];
 
-  const filtered_prompt_order_rules = Array.isArray(prompt_order_rules) && promptText
-    ? prompt_order_rules.filter((field) => field && (field in promptText))
-    : [];
 
   if (prompt_order_rules) {
     for (const rule of prompt_order_rules) {
@@ -260,23 +257,25 @@ const MyModal: React.FC<MyModalProps> = ({
     <ReactModal
       isOpen={isOpen}
       onRequestClose={closeModal}
-  style={{
-    overlay: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.4)',
-      zIndex: 1000,
-    },
-    content: {
-      overflow: 'visible',
-      padding: 0,
-      inset: 'auto',
-      position: 'relative',
-      border: 'none',
-      background: 'transparent',
-    }
-  }}
+      style={{
+        overlay: {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.4)',
+          zIndex: 1000,
+        },
+content: {
+  overflow: 'visible',
+  padding: 0,
+  inset: '0',
+  position: 'fixed',
+  border: 'none',
+  background: 'transparent',
+  width: '100vw',
+  height: '100vh',
+}
+      }}
       ariaHideApp={false}
     >
       <div className="my-modal-content">
@@ -461,10 +460,10 @@ const MyModal: React.FC<MyModalProps> = ({
 
                     return (
                       <div style={{
-                        // maxHeight: "800px",      // ✅ Set a max height
-                        // overflowY: "auto",       // ✅ Enable vertical scrolling
-                        // overflowX: "auto",       // ✅ Keep horizontal scrolling
-                        border: "1px solid #ddd" // Optional: visual boundary
+                        maxHeight: "400px",
+                        overflowY: "auto",
+                        overflowX: "auto",
+                        border: "1px solid #ddd",
                       }}>
                         <table className="table table-bordered table-sm" style={{ fontSize: "0.6rem" }}>
                           <thead>
@@ -485,7 +484,8 @@ const MyModal: React.FC<MyModalProps> = ({
                                       color: "black",
                                       textAlign: "center",
                                       position: "sticky",
-                                      top: 0,
+                                      top: -1,
+                                      paddingTop: "1px",
                                       left: editableCol?.pinned ? `${getPinnedColumnLeftPosition(colIndex)}px` : "auto",
                                       zIndex: editableCol?.pinned ? 20 : 15,
                                       minWidth: `${colWidth}px`,
@@ -787,17 +787,17 @@ const MyModal: React.FC<MyModalProps> = ({
                               flexDirection: "column",
                               alignItems: "center",
                               justifyContent: "center",
-                              borderRadius: main ? "12px" : "8px",
-                              padding: main ? "10px 18px 8px" : "6px 6px 4px",
+                              borderRadius: main ? "10px" : "6px",
+                              padding: main ? "8px 12px 6px" : "4px 4px 3px",
                               background: bgColor,
                               border: `1px solid #222`,
                               boxShadow: main ? "0 1px 8px rgba(166, 196, 190, 0.19)" : "0 1px 4px rgba(0,0,0,0.05)",
-                              minWidth: main ? "110px" : "80px",
+                              minWidth: main ? "90px" : "65px",
                             }}
                           >
                             <div
                               style={{
-                                fontSize: main ? "2rem" : "1.4rem",
+                                fontSize: main ? "1.6rem" : "1.1rem",
                                 fontWeight: main ? "900" : "700",
                                 lineHeight: 1.1,
                                 color: "#222", // dark text
@@ -810,11 +810,11 @@ const MyModal: React.FC<MyModalProps> = ({
                             </div>
                             <div
                               style={{
-                                fontSize: main ? "0.8rem" : "0.7rem",
+                                fontSize: main ? "0.68rem" : "0.62rem",
                                 color: "#222", // dark text
                                 textTransform: "uppercase",
-                                letterSpacing: main ? "2.5px" : "1.5px",
-                                marginTop: "4px",
+                                letterSpacing: main ? "2.3px" : "1.3px",
+                                marginTop: "3px",
                                 textAlign: "center",
                               }}
                             >
@@ -902,25 +902,25 @@ const MyModal: React.FC<MyModalProps> = ({
                   const isSliderRule = sliderRules.includes(rule);
 
                   return (
-<div
-  key={index}
-  className="d-flex flex-column"
-  style={{
-    flex: "1 1 40%",
-    minWidth: "120px",
-    marginBottom: "4px",
-    padding: "2px 0",
-  }}
->
-  <label
-    className="mb-1"
-    style={{
-      fontSize: "0.8rem",
-      fontWeight: "bold",
-      textTransform: "capitalize",
-      marginBottom: "2px",
-    }}
-  >
+                    <div
+                      key={index}
+                      className="d-flex flex-column"
+                      style={{
+                        flex: "1 1 40%",
+                        minWidth: "120px",
+                        marginBottom: "4px",
+                        padding: "2px 0",
+                      }}
+                    >
+                      <label
+                        className="mb-1"
+                        style={{
+                          fontSize: "0.8rem",
+                          fontWeight: "bold",
+                          textTransform: "capitalize",
+                          marginBottom: "2px",
+                        }}
+                      >
                         {rule.replace(/_/g, " ")}:
                         {rule === "sell_amount" && (
                           <span

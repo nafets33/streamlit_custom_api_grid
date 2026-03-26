@@ -29,18 +29,18 @@
   flex-direction: column;
   position: relative;
   background-color: #fefefe;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  max-width: 90vw;         /* Allow modal to grow wider */
-  min-width: 300px;
-  width: auto;             /* Let content determine width */
-  max-height: 90vh;        /* Prevent modal from exceeding viewport */
+  border-radius: 0;
+  box-shadow: none;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
   box-sizing: border-box;
-  margin: 16px;
+  margin: 0;
   animation-name: animatetop;
   animation-duration: 0.4s;
-  font-size: 0.85rem;      /* Smaller base font size for modal */
-  padding: 0;              /* Remove padding to avoid extra space */
+  font-size: 0.85rem;
+  padding: 0;
 }
 
 /* Modal Header */
