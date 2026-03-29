@@ -59,10 +59,7 @@ const MyModal: React.FC<MyModalProps> = ({
   const [showStarsMarginSliders, setShowStarsMarginSliders] = React.useState(false);
 
   const [showButtonColData, setShowButtonColData] = React.useState(true);
-  const [sellQtys, setSellQtys] = React.useState<{ [key: number]: string }>({});
-  const handleSellQtyChange = (idx: number, value: string) => {
-    setSellQtys((prev) => ({ ...prev, [idx]: value }));
-  };
+
 
 
 
@@ -121,8 +118,9 @@ const MyModal: React.FC<MyModalProps> = ({
 
       const ordersWithEdits = ordersToRender.map((order: any, idx: number) => {
         let edits: any = {};
-        editableCols.forEach((col: { col_header: string }) => {
-          edits[col.col_header] = editableValues[col.col_header]?.[idx] ?? order[col.col_header] ?? ""; // Use nullish coalescing
+        editableCols.forEach((col: { col_header: string; editable?: boolean }) => {
+          if (col.editable === false) return;
+          edits[col.col_header] = editableValues[col.col_header]?.[idx] ?? order[col.col_header] ?? "";
         });
         return { ...order, ...edits };
       });
@@ -130,13 +128,14 @@ const MyModal: React.FC<MyModalProps> = ({
 
 
       const body = {
+        ...modalData.kwargs,
+        client_user: modalData.username,
         username: modalData.username,
         prod: modalData.prod,
         selected_row: modalData.selectedRow,
         default_value: promptText,
         editable_orders: ordersWithEdits,
         selected_data_type: activeDisplayColumn,
-        ...modalData.kwargs,
       };
       const { data: res } = await axios.post(modalData.button_api, body);
       const { status, data, description } = res;
@@ -167,9 +166,6 @@ const MyModal: React.FC<MyModalProps> = ({
     if (isOpen) setTimeout(() => ref.current?.focus(), 100);
   }, [isOpen]);
 
-  useEffect(() => {
-    setSellQtys({}); // Reset sellQtys to an empty object
-  }, [isOpen, selectedRow]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -207,7 +203,8 @@ const MyModal: React.FC<MyModalProps> = ({
     }
 
     const reset: any = {};
-    editableCols.forEach(({ col_header }: { col_header: string }) => {
+    editableCols.forEach(({ col_header, editable }: { col_header: string; editable?: boolean }) => {
+      if (editable === false) return; // skip — reads live from order[col] instead
       reset[col_header] = {};
       orders.forEach((order: any, idx: number) => {
         reset[col_header][idx] = order[col_header] ?? "";
@@ -265,16 +262,16 @@ const MyModal: React.FC<MyModalProps> = ({
           backgroundColor: 'rgba(0, 0, 0, 0.4)',
           zIndex: 1000,
         },
-content: {
-  overflow: 'visible',
-  padding: 0,
-  inset: '0',
-  position: 'fixed',
-  border: 'none',
-  background: 'transparent',
-  width: '100vw',
-  height: '100vh',
-}
+        content: {
+          overflow: 'visible',
+          padding: 0,
+          inset: '0',
+          position: 'fixed',
+          border: 'none',
+          background: 'transparent',
+          width: '100vw',
+          height: '100vh',
+        }
       }}
       ariaHideApp={false}
     >
@@ -570,6 +567,23 @@ content: {
                                           }}
                                           style={{ width: "100%", fontSize: "0.8rem" }}
                                         />
+                                      </td>
+                                    );
+                                  } else if (editableCol && editableCol.editable === false) {
+                                    // Static — reads live from order[col], conditionalColor still works
+                                    return (
+                                      <td
+                                        key={col}
+                                        style={{
+                                          backgroundColor: getCellBackgroundColor(col, idx, order),
+                                          position: editableCol.pinned ? "sticky" : "relative",
+                                          left: editableCol.pinned ? `${getPinnedColumnLeftPosition(colIndex)}px` : "auto",
+                                          zIndex: editableCol.pinned ? 5 : 1,
+                                          minWidth: `${colWidth}px`,
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        {order[col] !== undefined ? String(order[col]) : ""}
                                       </td>
                                     );
                                   } else if (editableCol) {

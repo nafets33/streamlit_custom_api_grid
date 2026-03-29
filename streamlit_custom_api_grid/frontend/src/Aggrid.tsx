@@ -402,6 +402,9 @@ const AgGrid = (props: Props) => {
   const [activeFilter, setActiveFilter] = useState<Record<string, string[]>>({});
   const [filtersExpanded, setFiltersExpanded] = useState(true);
 
+  const [tickerTapeItems, setTickerTapeItems] = useState<{ symbol: string; value: number }[]>([]);
+
+
   const buildDeltaFlashInfo = (
     row_id: string,
     existingData: Record<string, any>,
@@ -505,21 +508,40 @@ const AgGrid = (props: Props) => {
               return;
             }
 
-            if (Array.isArray(data.action_orders) && data.action_orders.length > 0) {
-              log("📋 Received action_orders:", data);
-              const label = data.label || 'action_orders';
-              setWsModalData({
-                prompt_message: data.title || 'Action Orders',
-                button_api: kwargs.action_orders_button_api || data.button_api || '',
+            if (data.ticker_tape && Array.isArray(data.ticker_tape)) {
+              setTickerTapeItems(data.ticker_tape);
+            }
+
+            if (Array.isArray(data.wave_data?.data) && data.wave_data.data.length > 0) {
+              log("📋 Received wave_data:", data);
+              const wsLabel_two = 'wave_data';
+              setWsModalData_two({
+                prompt_message: data.wave_data.title || 'Wave Data',
+                button_api: kwargs.action_buys_button_api || data.wave_data.button_api || '',
                 username: username,
                 prod: prod,
                 kwargs: kwargs,
                 gridRef: gridRef,
                 index: index,
-                selectedRow: { [label]: (data.action_orders || []).map((item: any) => item.updates ?? item) },
-                editableCols: { [label]: data.editable_cols?.[label] || [] },
+                selectedRow: { [wsLabel_two]: (data.wave_data.data || []).map((item: any) => item.updates ?? item) },
+                editableCols: { [wsLabel_two]: data.wave_data.editable_cols || [] },
               });
-              return;
+            }
+
+            if (Array.isArray(data.action_orders?.data) && data.action_orders.data.length > 0) {
+              log("📋 Received action_orders:", data);
+              const wsLabel = 'active_orders';
+              setWsModalData({
+                prompt_message: data.action_orders.title || 'Action Orders',
+                button_api: kwargs.action_orders_button_api || data.action_orders.button_api || '',
+                username: username,
+                prod: prod,
+                kwargs: kwargs,
+                gridRef: gridRef,
+                index: index,
+                selectedRow: { [wsLabel]: (data.action_orders.data || []).map((item: any) => item.updates ?? item) },
+                editableCols: { [wsLabel]: data.action_orders.editable_cols || [] },
+              });
             }
 
             if (data.type === 'grid_snapshot' && Array.isArray(data.rows)) {
@@ -564,12 +586,12 @@ const AgGrid = (props: Props) => {
                   if (i >= 0) g_rowdata[i] = updatedRow;
                 });
 
-// const updatedNodes = rowsToUpdate
-//   .map((row: any) => gridRef.current?.api.getRowNode(String(row[index])))
-//   .filter((node): node is NonNullable<typeof node> => node != null);
-//   if (updatedNodes.length > 0) {
-//     gridRef.current?.api.refreshCells({ rowNodes: updatedNodes, force: true });
-//   }
+                // const updatedNodes = rowsToUpdate
+                //   .map((row: any) => gridRef.current?.api.getRowNode(String(row[index])))
+                //   .filter((node): node is NonNullable<typeof node> => node != null);
+                //   if (updatedNodes.length > 0) {
+                //     gridRef.current?.api.refreshCells({ rowNodes: updatedNodes, force: true });
+                //   }
 
                 applyDeltaFlashAnimations(rowsToUpdate, deltaFlashInfo);
                 log(`✅ Updated ${rowsToUpdate.length} rows`);
@@ -577,24 +599,6 @@ const AgGrid = (props: Props) => {
 
               setFilterButtonData([...g_rowdata]);
               if (gridRef.current?.api) calculateAndUpdateSubtotals(gridRef.current.api);
-            }
-
-
-            if (Array.isArray(data.action_buys) && data.action_buys.length > 0) {
-              log("📋 Received action_buys:", data);
-              const label = data.label || 'action_buys';
-              setWsModalData_two({
-                prompt_message: data.title || 'Action Buys',
-                button_api: kwargs.action_buys_button_api || data.button_api || '',
-                username: username,
-                prod: prod,
-                kwargs: kwargs,
-                gridRef: gridRef,
-                index: index,
-                selectedRow: { [label]: (data.action_buys || []).map((item: any) => item.updates ?? item) },
-                editableCols: { [label]: data.editable_cols_two?.[label] || [] },
-              });
-              return;
             }
 
 
@@ -619,6 +623,7 @@ const AgGrid = (props: Props) => {
                 gridRef.current?.api.applyTransaction({ add: rowsToAdd });
                 g_rowdata.push(...rowsToAdd);
                 setFilterButtonData([...g_rowdata]);
+                if (gridRef.current?.api) calculateAndUpdateSubtotals(gridRef.current.api);
                 log(`✅ Added ${rowsToAdd.length} new rows`);
               }
 
@@ -629,12 +634,12 @@ const AgGrid = (props: Props) => {
                   if (i >= 0) g_rowdata[i] = updatedRow;
                 });
 
-  //               const updatedNodes = rowsToUpdate
-  // .map((row: any) => gridRef.current?.api.getRowNode(String(row[index])))
-  // .filter((node): node is NonNullable<typeof node> => node != null);
-  // if (updatedNodes.length > 0) {
-  //   gridRef.current?.api.refreshCells({ rowNodes: updatedNodes, force: true });
-  // }
+                //               const updatedNodes = rowsToUpdate
+                // .map((row: any) => gridRef.current?.api.getRowNode(String(row[index])))
+                // .filter((node): node is NonNullable<typeof node> => node != null);
+                // if (updatedNodes.length > 0) {
+                //   gridRef.current?.api.refreshCells({ rowNodes: updatedNodes, force: true });
+                // }
 
                 applyDeltaFlashAnimations(rowsToUpdate, deltaFlashInfo);  // ← replaces inline requestAnimationFrame block
                 log(`✅ Updated ${rowsToUpdate.length} rows at once`);
@@ -1659,106 +1664,136 @@ const AgGrid = (props: Props) => {
       }
 
 
-      {/* ── Edit Chessboard Ticker Search Button ───────────────────────────────────────── */}
-      {kwargs.show_ticker_search_btn && (
-        <div style={{ marginBottom: "5px", display: "flex", justifyContent: "flex-start" }}>
-          <button
-            onClick={() => setTickerSearchModalShow(true)}
-            style={{
-              background: "linear-gradient(135deg, #1b4a1aff 0%, #0f3314ff 100%)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              padding: "7px 16px",
-              fontWeight: 700,
-              fontSize: "0.88rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-              transition: "opacity 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-            title="Search & add a ticker to your chessboard"
-          >
-            Search Edit Portfolio Board
-          </button>
+      {/* ── Action Toolbar (Portfolio + WS Modal Buttons) ───────────────── */}
+      {(kwargs.show_ticker_search_btn || (wsModalData && Object.keys(wsModalData).length > 0) || (wsModalData_two && Object.keys(wsModalData_two).length > 0)) && (
+        <div style={{ marginBottom: "8px" }}>
+          {/* Header label */}
+          <div style={{
+            fontSize: "10px", fontWeight: 700, color: "#4a6b4a",
+            textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: "4px",
+          }}>
+            Actions
+          </div>
+          {/* Divider line */}
+          <div style={{ height: "1px", background: "#c8dcc8", marginBottom: "5px" }} />
+          {/* Button row */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+
+            {kwargs.show_ticker_search_btn && (
+              <button
+                onClick={() => setTickerSearchModalShow(true)}
+                style={{
+                  // background: "linear-gradient(135deg, rgb(240, 254, 240) 0%, rgb(174, 212, 179) 100%)",
+                  // color: "#193f18",
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "4px 10px",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  // boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                title="Manage Portfolio Allocations"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" style={{ marginRight: 6 }}>
+                  <rect width="24" height="24" fill="#7e531e" />
+                  {[0, 1, 2, 3, 4, 5].map(row =>
+                    [0, 1, 2, 3, 4, 5].map(col =>
+                      (row + col) % 2 === 0
+                        ? <rect key={row * 6 + col} x={col * 4} y={row * 4} width="4" height="4" fill="#faf9f9" />
+                        : null
+                    )
+                  )}
+                </svg>
+              </button>
+            )}
+
+            {/* Divider between buttons if more than one visible */}
+            {kwargs.show_ticker_search_btn && (wsModalData && Object.keys(wsModalData).length > 0) && (
+              <div style={{ width: "1px", height: "20px", background: "#b0c8b0", flexShrink: 0 }} />
+            )}
+
+            {wsModalData && Object.keys(wsModalData).length > 0 && (
+              <button
+                onClick={() => setWsModalShow((prev) => !prev)}
+                style={{
+                  background: wsModalShow
+                    ? "linear-gradient(135deg, #f7efd5 0%, #dadebe 100%)"
+                    : "linear-gradient(135deg, #fbfbdb 0%, #e4e3c7 100%)",
+                  color: "#2c2929",
+                  border: "2px solid #223a23",
+                  borderRadius: "6px",
+                  padding: "4px 10px",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              >
+                {wsModalShow ? "▼" : "▶"}{" "}
+                {wsModalData.prompt_message || "View Data"}
+                {(() => {
+                  const key = Object.keys(wsModalData.selectedRow || {})[0];
+                  const rows = wsModalData.selectedRow?.[key];
+                  return Array.isArray(rows) ? ` (${rows.length})` : "";
+                })()}
+              </button>
+            )}
+
+            {wsModalData && Object.keys(wsModalData).length > 0 && wsModalData_two && Object.keys(wsModalData_two).length > 0 && (
+              <div style={{ width: "1px", height: "20px", background: "#b0c8b0", flexShrink: 0 }} />
+            )}
+
+            {wsModalData_two && Object.keys(wsModalData_two).length > 0 && (
+              <button
+                onClick={() => setWsModalShow_two((prev) => !prev)}
+                style={{
+                  background: wsModalShow_two
+                    ? "linear-gradient(135deg, #f1fff2 0%, #cbebcc 100%)"
+                    : "linear-gradient(135deg, #f1fff2 0%, #cbebcc 100%)",
+                  color: "#153c1d",
+                  border: "2px solid #2c5f2e",
+                  borderRadius: "6px",
+                  padding: "4px 10px",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                  transition: "opacity 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+              >
+                {wsModalShow_two ? "▼" : "▶"}{" "}
+                {wsModalData_two.prompt_message || "View Data"}
+                {(() => {
+                  const key = Object.keys(wsModalData_two.selectedRow || {})[0];
+                  const rows = wsModalData_two.selectedRow?.[key];
+                  return Array.isArray(rows) ? ` (${rows.length})` : "";
+                })()}
+              </button>
+            )}
+
+          </div>
         </div>
       )}
 
-      {/* ── WS Modal Data Button ───────────────────────────────────────── */}
-      {wsModalData && Object.keys(wsModalData).length > 0 && (
-        <div style={{ marginBottom: "5px", display: "flex", justifyContent: "flex-start" }}>
-          <button
-            onClick={() => setWsModalShow((prev) => !prev)}
-            style={{
-              background: wsModalShow
-                ? "linear-gradient(135deg, #1a3d1c 0%, #2c5f2e 100%)"
-                : "linear-gradient(135deg, #2c5f2e 0%, #3a7d44 100%)",
-              color: "#fff",
-              border: "2px solid #2c5f2e",
-              borderRadius: "8px",
-              padding: "7px 16px",
-              fontWeight: 700,
-              fontSize: "0.88rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-              transition: "opacity 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            {wsModalShow ? "▼" : "▶"}{" "}
-            {wsModalData.prompt_message || "View Data"}
-            {(() => {
-              const key = Object.keys(wsModalData.selectedRow || {})[0];
-              const rows = wsModalData.selectedRow?.[key];
-              return Array.isArray(rows) ? ` (${rows.length})` : "";
-            })()}
-          </button>
-        </div>
-      )}
-
-      {/* ── WS Modal Data Button ───────────────────────────────────────── */}
-      {wsModalData_two && Object.keys(wsModalData_two).length > 0 && (
-        <div style={{ marginBottom: "5px", display: "flex", justifyContent: "flex-start" }}>
-          <button
-            onClick={() => setWsModalShow_two((prev) => !prev)}
-            style={{
-              background: wsModalShow_two
-                ? "linear-gradient(135deg, #1a3d1c 0%, #2c5f2e 100%)"
-                : "linear-gradient(135deg, #2c5f2e 0%, #3a7d44 100%)",
-              color: "#fff",
-              border: "2px solid #2c5f2e",
-              borderRadius: "8px",
-              padding: "7px 16px",
-              fontWeight: 700,
-              fontSize: "0.88rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-              transition: "opacity 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
-            {wsModalShow_two ? "▼" : "▶"}{" "}
-            {wsModalData_two.prompt_message || "View Data"}
-            {(() => {
-              const key = Object.keys(wsModalData_two.selectedRow || {})[0];
-              const rows = wsModalData_two.selectedRow?.[key];
-              return Array.isArray(rows) ? ` (${rows.length})` : "";
-            })()}
-          </button>
-        </div>
-      )}
 
       <TickerSearchModal
         isOpen={tickerSearchModalShow}
@@ -1768,8 +1803,8 @@ const AgGrid = (props: Props) => {
         kwargs={kwargs}
         api={api}
         toastr={toastr}
-        chessboard={kwargs.chessboard}  // ✅ Add this line
-        ticker_buying_powers={kwargs.ticker_buying_powers}  // ✅ Add this line
+        chessboard={kwargs.chessboard}
+        ticker_buying_powers={kwargs.ticker_buying_powers}
         cash_position={kwargs.cash_position}
         accountInfo={kwargs.accountInfo}
 
@@ -2268,52 +2303,31 @@ const AgGrid = (props: Props) => {
 
 
           {/* Streamer for streaming_list_text if present */}
-          {kwargs.streaming_list_text && Array.isArray(kwargs.streaming_list_text) && (
-            <div
-              style={{
-                width: "100%",
-                background: "#F3FAFD", // Match toggle_views button background
-                color: "#055A6E",      // Match toggle_views button text color
-                padding: "4px 10px",
-                fontSize: "13px",
-                borderBottom: "1px solid #ddd",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                marginBottom: "4px",
-                fontWeight: "bold",    // Match bold style from buttons
-              }}
-            >
-              <div
-                style={{
-                  display: "block",
-                  width: "100%",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  position: "relative",
-                }}
-              >
+          {(tickerTapeItems.length > 0 || (kwargs.streaming_list_text && Array.isArray(kwargs.streaming_list_text))) && (
+            <div style={{
+              width: "100%", background: "#F3FAFD", padding: "4px 10px",
+              fontSize: "13px", borderBottom: "1px solid #ddd",
+              whiteSpace: "nowrap", overflow: "hidden", marginBottom: "4px", fontWeight: "bold",
+            }}>
+              <div style={{ display: "block", width: "100%", whiteSpace: "nowrap", overflow: "hidden", position: "relative" }}>
                 <div
-                  style={{
-                    display: "inline-block",
-                    paddingLeft: "100%",
-                    animation: "scroll-left 40s linear infinite",
-                  }}
+                  key="ticker-tape-animation"
+                  style={{ display: "inline-block", paddingLeft: "100%", animation: "scroll-left 89s linear infinite" }}
                 >
-                  {kwargs.streaming_list_text.join("   |   ")}
+                  {tickerTapeItems.length > 0
+                    ? tickerTapeItems.map((item, i) => (
+                      <span key={i} style={{ marginRight: "20px" }}>
+                        <span style={{ color: "#055A6E" }}>{item.symbol}</span>
+                        {" "}
+                        <span style={{ color: item.value >= 0 ? "#22863a" : "#cb2431", fontWeight: "bold" }}>
+                          {item.value >= 0 ? "+" : ""}{item.value.toFixed(2)}%
+                        </span>
+                      </span>
+                    ))
+                    : kwargs.streaming_list_text.join("   |   ")
+                  }
                 </div>
-                <style>
-                  {`
-                @keyframes scroll-left {
-                  0% {
-                  transform: translateX(0%);
-                  }
-                  100% {
-                  transform: translateX(-100%);
-                  }
-                }
-                `}
-                </style>
+                <style>{`@keyframes scroll-left { 0% { transform: translateX(0%); } 100% { transform: translateX(-100%); } }`}</style>
               </div>
             </div>
           )}
