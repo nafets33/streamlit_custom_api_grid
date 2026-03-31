@@ -880,13 +880,13 @@ const AgGrid = (props: Props) => {
 
                   setModalshow(true);
                   setModalData({
-                    gridRef: gridRef,           // ✅ Pass grid reference
-                    index: index,               // ✅ Pass index
+                    gridRef: gridRef,
+                    index: index,
                     prompt_message,
                     button_api: button_api,
                     username: username,
                     prod: prod,
-                    selectedRow: selectedRow,   // ✅ Fresh data from grid
+                    selectedRow: selectedRow,
                     kwargs: kwargs,
                     prompt_field,
                     prompt_order_rules,
@@ -1119,6 +1119,7 @@ const AgGrid = (props: Props) => {
     }
   }, [kwargs.subtotal_cols, index, grid_options]);
 
+
   const onGridReady = useCallback(async (params: GridReadyEvent) => {
     setTimeout(async () => {
       try {
@@ -1130,7 +1131,7 @@ const AgGrid = (props: Props) => {
         g_rowdata = array;
         setFilterButtonData(array);
 
-        // ✅ Calculate subtotals if subtotal_cols is provided
+        // Calculate subtotals if subtotal_cols is provided
         if (kwargs.subtotal_cols && kwargs.subtotal_cols.length > 0) {
           calculateAndUpdateSubtotals(params.api);
         }
@@ -1425,7 +1426,9 @@ const AgGrid = (props: Props) => {
     [props.grid_options, kwargs.nestedGridEnabled, kwargs.detailGridOptions]
   );
 
-
+  const [displayedCashPosition, setDisplayedCashPosition] = useState<number | null>(
+    kwargs.cash_position ?? null
+  );
 
   return (
 
@@ -1712,6 +1715,17 @@ const AgGrid = (props: Props) => {
                     )
                   )}
                 </svg>
+
+                {displayedCashPosition != null && (
+                  <span style={{
+                    fontSize: "0.89rem",
+                    fontWeight: 700,
+                    color: displayedCashPosition >= 0 ? "#1e7b34" : "#ce3e12",
+                  }}>
+                    {displayedCashPosition * 100}% Cash
+                  </span>
+                )}
+
               </button>
             )}
 
@@ -1806,7 +1820,10 @@ const AgGrid = (props: Props) => {
         chessboard={kwargs.chessboard}
         ticker_buying_powers={kwargs.ticker_buying_powers}
         cash_position={kwargs.cash_position}
+        onCashPositionSaved={(val) => setDisplayedCashPosition(val)}
         accountInfo={kwargs.accountInfo}
+        allTickers={kwargs.allTickers || []}
+
 
       />
 

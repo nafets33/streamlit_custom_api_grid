@@ -169,6 +169,8 @@ interface TickerSearchModalProps {
   ticker_buying_powers?: { [ticker: string]: TickerPower };
   accountInfo?: { buying_power: number; last_equity: number };
   cash_position?: number;
+  allTickers?: string[];
+  onCashPositionSaved?: (newValue: number) => void;
 }
 
 const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
@@ -183,6 +185,8 @@ const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
   ticker_buying_powers: initialTickerBuyingPowers,
   accountInfo,        // ← add
   cash_position = 0,  // ← add
+  allTickers = [],   // ← add
+  onCashPositionSaved, // ← add
 }) => {
   const formStyles = { ...DEFAULT_FORM_STYLES, ...(kwargs?.form_styles ?? {}) };
 
@@ -193,7 +197,7 @@ const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
   const [tickerBuyingPowers, setTickerBuyingPowers] = useState<{ [ticker: string]: TickerPower }>(
     initialTickerBuyingPowers || {}
   );
-  const [refreshing, setRefreshing] = useState(false);
+  const [cachedTickers, setCachedTickers] = useState<string[]>([]);
 
   // ── Search ─────────────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -291,16 +295,34 @@ const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
       setSearchResults([]);
       return;
     }
+
+    const q = searchQuery.trim().toUpperCase();
+
+    // Use prop tickers if available
+    const tickerSource = allTickers.length > 0 ? allTickers : cachedTickers;
+
+    if (tickerSource.length > 0) {
+      const prefix_matches = tickerSource.filter((t) => t.toUpperCase().startsWith(q));
+      const contains_matches = tickerSource.filter((t) => t.toUpperCase().includes(q) && !t.toUpperCase().startsWith(q));
+      setSearchResults([...prefix_matches, ...contains_matches].slice(0, 40));
+      return;
+    }
+
+    // Fallback: fetch ALL tickers once, cache them, then filter
     const controller = new AbortController();
     const delay = setTimeout(async () => {
       setSearchLoading(true);
       try {
         const res = await axios.post(
           `${apiBase}/api/data/ticker_search_query`,
-          { client_user: username, query: searchQuery.trim().toUpperCase(), prod, api_key: apiKey },
+          { client_user: username, query: "", prod, api_key: apiKey },  // ← empty query = all tickers
           { signal: controller.signal }
         );
-        setSearchResults(res.data?.tickers || []);
+        const tickers: string[] = res.data?.tickers || [];
+        setCachedTickers(tickers);  // ← store for future searches
+        const pm = tickers.filter((t) => t.toUpperCase().startsWith(q));
+        const cm = tickers.filter((t) => t.toUpperCase().includes(q) && !t.toUpperCase().startsWith(q));
+        setSearchResults([...pm, ...cm].slice(0, 40));
       } catch (err: any) {
         if (err.name !== "CanceledError" && err.code !== "ERR_CANCELED") {
           console.error("ticker search error", err);
@@ -313,7 +335,7 @@ const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
       clearTimeout(delay);
       controller.abort();
     };
-  }, [searchQuery, apiBase, username, prod, apiKey]);
+  }, [searchQuery, allTickers, cachedTickers, apiBase, username, prod, apiKey]);
 
 
   // Sync inline allocs whenever chessboard changes (load, refresh, save)
@@ -346,6 +368,7 @@ const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
       if (status === "success") {
         toastr.success(description || "Cash position saved!", "Success");
         setSavedCashPosition(returned ?? localCashPosition);
+        onCashPositionSaved?.(returned ?? localCashPosition);
       } else {
         toastr.error(description || "Failed to save cash position.");
       }
@@ -651,30 +674,30 @@ const TickerSearchModal: React.FC<TickerSearchModalProps> = ({
           backgroundColor: "rgba(0,0,0,0.45)",
           zIndex: 1100,
         },
-content: {
-  overflow: "visible",
-  padding: 0,
-  inset: "0",
-  position: "fixed",
-  border: "none",
-  background: "transparent",
-  width: "100vw",
-  height: "100vh",
-  maxWidth: "100vw",
-  maxHeight: "100vh",
-},
+        content: {
+          overflow: "visible",
+          padding: 0,
+          inset: "0",
+          position: "fixed",
+          border: "none",
+          background: "transparent",
+          width: "100vw",
+          height: "100vh",
+          maxWidth: "100vw",
+          maxHeight: "100vh",
+        },
       }}
       ariaHideApp={false}
     >
       <div
         className="my-modal-content"
-  style={{
-    borderRadius: 0,
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-  }}
+        style={{
+          borderRadius: 0,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+        }}
       >
         {/* ── Header ────────────────────────────────────────────────────── */}
         <div
